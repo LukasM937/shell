@@ -14,7 +14,7 @@ StyledClippingRect {
     property real animPerc: UPower.displayDevice.percentage
 
     color: Colours.palette.m3secondaryContainer
-    radius: Tokens.rounding.large
+    radius: Tokens.rounding.medium
 
     implicitWidth: Config.dashboard.performance.showCpu || (Config.dashboard.performance.showGpu && Gpu.type !== GpuType.None) || Config.dashboard.performance.showStorage || Config.dashboard.performance.showMemory ? Tokens.sizes.dashboard.perfBattWidth : Tokens.sizes.dashboard.perfBattWidthSingle
     implicitHeight: Tokens.sizes.dashboard.perfBattHeight

@@ -16,7 +16,7 @@ StyledRect {
     readonly property real percentage: Storage.primaryDisk?.perc ?? 0
 
     color: Colours.tPalette.m3surfaceContainer
-    radius: Tokens.rounding.extraExtraLarge
+    radius: Tokens.rounding.medium
 
     implicitWidth: layout.implicitWidth + layout.anchors.margins * 2
     implicitHeight: layout.implicitHeight + Tokens.padding.large * 2
