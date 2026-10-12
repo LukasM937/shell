@@ -3,11 +3,13 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Effects
 import QtQuick.Layouts
+import Quickshell.Io
 import Caelestia.Config
 import Caelestia.I18n
 import Caelestia.State
 import qs.components
 import qs.services
+import qs.utils
 
 Item {
     id: root
@@ -21,9 +23,11 @@ Item {
     readonly property bool blurEnabled: bgEnabled && Config.background.desktopClock.background.blur && !RuntimeState.gameMode
     readonly property bool invertColors: Config.background.desktopClock.invertColors
     readonly property bool useLightSet: Colours.light ? !invertColors : invertColors
-    readonly property color safePrimary: useLightSet ? Colours.palette.m3primaryContainer : Colours.palette.m3primary
-    readonly property color safeSecondary: useLightSet ? Colours.palette.m3secondaryContainer : Colours.palette.m3secondary
-    readonly property color safeTertiary: useLightSet ? Colours.palette.m3tertiaryContainer : Colours.palette.m3tertiary
+    // Optional per-wallpaper colours picked for contrast (written by an external script)
+    property var contrastColours: ({})
+    readonly property color safePrimary: contrastColours.primary ? `#${contrastColours.primary}` : useLightSet ? Colours.palette.m3primaryContainer : Colours.palette.m3primary
+    readonly property color safeSecondary: contrastColours.secondary ? `#${contrastColours.secondary}` : useLightSet ? Colours.palette.m3secondaryContainer : Colours.palette.m3secondary
+    readonly property color safeTertiary: contrastColours.tertiary ? `#${contrastColours.tertiary}` : useLightSet ? Colours.palette.m3tertiaryContainer : Colours.palette.m3tertiary
 
     implicitWidth: layout.implicitWidth + (Tokens.padding.large * 4 * root.clockScale)
     implicitHeight: layout.implicitHeight + (Tokens.padding.extraLargeIncreased * root.clockScale)
@@ -149,6 +153,21 @@ Item {
                 }
             }
         }
+    }
+
+    FileView {
+        path: `${Paths.state}/desktop-clock.json`
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                root.contrastColours = JSON.parse(text());
+            } catch (e) {
+                root.contrastColours = {};
+            }
+        }
+        onLoadFailed: root.contrastColours = {}
     }
 
     Behavior on clockScale {
