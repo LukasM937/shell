@@ -10,6 +10,7 @@ import qs.components.controls
 import qs.components.images
 import qs.services
 import qs.modules.nexus.common
+import qs.modules.nexus.pages.wallandstyle
 
 PageBase {
     id: root
@@ -196,5 +197,9 @@ PageBase {
             checked: !Colours.light
             onToggled: Colours.setMode(checked ? "dark" : "light")
         }
+
+        DesktopClockSettings {}
+
+        DepthClockSettings {}
     }
 }
