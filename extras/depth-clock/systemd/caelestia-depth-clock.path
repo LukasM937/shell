@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch wallpaper, scheme and depth clock settings
+
+[Path]
+PathChanged=%h/.local/state/caelestia/wallpaper/path.txt
+PathChanged=%h/.local/state/caelestia/scheme.json
+PathChanged=%h/.config/caelestia/depth-clock.json
+
+[Install]
+WantedBy=default.target
