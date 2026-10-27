@@ -15,9 +15,27 @@ Singleton {
     readonly property list<MprisPlayer> list: Mpris.players.values
     readonly property MprisPlayer active: props.manualActive ?? list.find(p => getIdentity(p) === GlobalConfig.services.defaultPlayer) ?? list[0] ?? null
     property alias manualActive: props.manualActive
+    // App of the default player, launched by play when there is no player
+    readonly property DesktopEntry defaultPlayerApp: {
+        CUtils.dependency(DesktopEntries.applications.values); // Entries load asynchronously
+        const name = GlobalConfig.services.defaultPlayer;
+        return name ? DesktopEntries.heuristicLookup(name) : null;
+    }
+    readonly property bool canTogglePlaying: active ? active.canTogglePlaying : defaultPlayerApp !== null
 
     // Dedup key for progressive metadata (e.g. mpv-mpris/yt-dlp player fills title then artist later).
     property string lastNowPlayingKey: ""
+
+    // Toggles the active player, or launches the default player if there is none
+    function togglePlaying(): void {
+        const active = root.active;
+        if (active) {
+            if (active.canTogglePlaying)
+                active.togglePlaying();
+        } else {
+            root.defaultPlayerApp?.execute();
+        }
+    }
 
     function getIdentity(player: MprisPlayer): string {
         if (!player)
@@ -96,11 +114,7 @@ Singleton {
         // qmllint enable unresolved-type
         name: "mediaToggle"
         description: "Toggle media playback"
-        onPressed: {
-            const active = root.active;
-            if (active && active.canTogglePlaying)
-                active.togglePlaying();
-        }
+        onPressed: root.togglePlaying()
     }
 
     // qmllint disable unresolved-type
@@ -158,9 +172,7 @@ Singleton {
         }
 
         function playPause(): void {
-            const active = root.active;
-            if (active?.canTogglePlaying)
-                active.togglePlaying();
+            root.togglePlaying();
         }
 
         function previous(): void {

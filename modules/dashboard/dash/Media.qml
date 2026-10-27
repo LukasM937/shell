@@ -147,8 +147,8 @@ Item {
             isRound: true
             shapeMorph: true
             checked: Players.active?.isPlaying ?? false
-            disabled: !Players.active?.canTogglePlaying
-            onClicked: Players.active?.togglePlaying()
+            disabled: !Players.canTogglePlaying
+            onClicked: Players.togglePlaying()
         }
 
         IconButton {

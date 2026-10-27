@@ -156,8 +156,8 @@ ColumnLayout {
             fillWidth: true
             checked: Players.active?.isPlaying ?? false
             font: Tokens.font.icon.large
-            disabled: !Players.active?.canTogglePlaying
-            onClicked: Players.active?.togglePlaying()
+            disabled: !Players.canTogglePlaying
+            onClicked: Players.togglePlaying()
         }
 
         IconButton {
