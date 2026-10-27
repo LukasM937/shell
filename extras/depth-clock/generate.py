@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-from PIL import Image, ImageFilter, ImageFont
+from PIL import Image, ImageFilter, ImageFont, UnidentifiedImageError
 
 HERE = Path(__file__).resolve().parent
 HOME = Path.home()
@@ -182,8 +182,8 @@ def worst_contrast(colour: str, pixels: np.ndarray) -> float:
     if pixels.size == 0:
         return 21.0
     lums = np.sort(luminance(pixels.reshape(-1, 3).astype(float)))
-    n, l = len(lums), hex_lum(colour)
-    return min(contrast(l, lums.mean()), contrast(l, lums[n - 1 - n // 10] if l > lums.mean() else lums[n // 10]))
+    n, lum = len(lums), hex_lum(colour)
+    return min(contrast(lum, lums.mean()), contrast(lum, lums[n - 1 - n // 10] if lum > lums.mean() else lums[n // 10]))
 
 
 def pick_colour(keys: list[str], colours: dict, pixels: np.ndarray, minimum: float, avoid: set[str]) -> str:
@@ -197,8 +197,8 @@ def pick_colour(keys: list[str], colours: dict, pixels: np.ndarray, minimum: flo
     for k in keys:
         if k not in colours:
             continue
-        l = hex_lum(colours[k])
-        worst = min(contrast(l, mean), contrast(l, bright if l > mean else dark))
+        lum = hex_lum(colours[k])
+        worst = min(contrast(lum, mean), contrast(lum, bright if lum > mean else dark))
         scored.append((worst, k))
     # Prefer text that is lighter than a dark background (or darker than a light one):
     # dark text on a dark scene only because of a few bright spots looks wrong
@@ -231,7 +231,13 @@ def main() -> None:
     colours = json.loads((STATE / "scheme.json").read_text())["colours"]
     sw, sh = screen_size()
 
-    img = Image.open(wallpaper)
+    try:
+        img = Image.open(wallpaper)
+    except UnidentifiedImageError:
+        # Video wallpaper: a still cutout can't follow it, so no depth clock
+        layout_path.write_text(json.dumps({"enabled": False, "wallpaper": wallpaper}) + "\n")
+        print(f"not an image, depth clock off: {wallpaper}", file=sys.stderr)
+        return
     img.seek(0)
     img = img.convert("RGB")
     img.thumbnail((3840, 3840))
@@ -269,12 +275,11 @@ def main() -> None:
     time_axes = {"wght": t["weight"], "ROND": t["roundness"], "wdth": t["width"], "opsz": 144}
     time_size = t["size"]
     tf = load_font(time_font, time_size * sh, time_axes)
-    x0, y0, x1, y1 = tf.getbbox("88:88", anchor="ls")
+    x0, y0, x1, _ = tf.getbbox("88:88", anchor="ls")
     if (x1 - x0) / sw > t["maxWidth"]:  # wide fonts: shrink to fit
         time_size *= t["maxWidth"] / ((x1 - x0) / sw)
         tf = load_font(time_font, time_size * sh, time_axes)
-        x0, y0, x1, y1 = tf.getbbox("88:88", anchor="ls")
-    time_px = time_size * sh
+        x0, y0, x1, _ = tf.getbbox("88:88", anchor="ls")
     time_w, time_up = (x1 - x0) / sw, -y0 / sh  # ink width, height above the baseline
     # Horizontal extent of each digit, as fractions of the ink width (the colon is skipped)
     adv = [tf.getlength(c) for c in "88:88"]
@@ -354,9 +359,12 @@ def main() -> None:
     if cfg["palette"] == "single":
         c_day = c_date = c_bin = c_time
     else:
-        c_day = pick_colour(PREFERENCE["day"], colours, region(cx - day_w / 2, day_base - day_up, cx + day_w / 2, day_base, True), minc, {c_time})
-        c_date = pick_colour(PREFERENCE["date"], colours, region(cx - 0.15, date_base - 1.2 * date_px / sh, cx + 0.15, date_base, False), minc, set())
-        c_bin = pick_colour(PREFERENCE["binary"], colours, region(cx - 0.1, bin_top, cx + 0.1, bin_top + 4.6 * dot, False), minc, set())
+        day_bg = region(cx - day_w / 2, day_base - day_up, cx + day_w / 2, day_base, True)
+        date_bg = region(cx - 0.15, date_base - 1.2 * date_px / sh, cx + 0.15, date_base, False)
+        bin_bg = region(cx - 0.1, bin_top, cx + 0.1, bin_top + 4.6 * dot, False)
+        c_day = pick_colour(PREFERENCE["day"], colours, day_bg, minc, {c_time})
+        c_date = pick_colour(PREFERENCE["date"], colours, date_bg, minc, set())
+        c_bin = pick_colour(PREFERENCE["binary"], colours, bin_bg, minc, set())
 
     # Date and binary sit in front of the scenery; if it is busy there, put a soft plate behind them
     bd = cfg["backdrop"]

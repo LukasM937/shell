@@ -65,7 +65,7 @@ Item {
         Text {
             readonly property real px: Math.max(1, (root.dayConf.size ?? 0.05) * root.height)
 
-            text: Qt.formatDateTime(clock.date, "dddd").toUpperCase()
+            text: Tr.formatDateTime(clock.date, "dddd").toUpperCase()
             color: `#${root.dayConf.colour ?? "ffffff"}`
             font.family: root.dayConf.font ?? ""
             font.pixelSize: px
@@ -80,7 +80,7 @@ Item {
 
             readonly property bool outline: root.timeConf.style === "outline"
 
-            text: Qt.formatDateTime(clock.date, Units.twelveHourClock ? "h:mm" : "hh:mm")
+            text: Tr.formatDateTime(clock.date, Units.twelveHourClock ? "h:mm" : "hh:mm")
             color: outline ? "transparent" : `#${root.timeConf.colour ?? "ffffff"}`
             font.family: root.timeConf.font ?? ""
             font.pixelSize: Math.max(1, (root.timeConf.size ?? 0.3) * root.height)
@@ -193,7 +193,7 @@ Item {
             readonly property int year: clock.date.getFullYear() + (root.dateConf.humanEra ? 10000 : 0)
             readonly property real px: Math.max(1, (root.dateConf.size ?? 0.025) * root.height)
 
-            text: `- ${Qt.formatDateTime(clock.date, "MMMM d")}, ${year} -`.toUpperCase()
+            text: `- ${Tr.formatDateTime(clock.date, "MMMM d")}, ${year} -`.toUpperCase()
             color: `#${root.dateConf.colour ?? "ffffff"}`
             font.family: root.dateConf.font ?? ""
             font.pixelSize: px
@@ -208,6 +208,7 @@ Item {
             id: binary
 
             readonly property real dot: (root.binaryConf.dot ?? 0.016) * root.height
+            // Not locale formatted: the digits are parsed, so they must stay ASCII
             readonly property string digits: Qt.formatDateTime(clock.date, root.binaryConf.seconds ? "hhmmss" : "hhmm")
             readonly property color colour: `#${root.binaryConf.colour ?? "ffffff"}`
 

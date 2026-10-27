@@ -60,7 +60,8 @@ def main() -> None:
     dt = lay["date"]
     year = now.year + (10000 if dt["humanEra"] else 0)
     datef = load_font(dt["font"], dt["size"] * sh, {"wght": dt["weight"]})
-    ImageDraw.Draw(front).text((dt["cx"] * sw, dt["baseline"] * sh), f"- {now:%B} {now.day}, {year} -".upper(), font=datef, anchor="ms", fill=rgb(dt["colour"]))
+    date_text = f"- {now:%B} {now.day}, {year} -".upper()
+    ImageDraw.Draw(front).text((dt["cx"] * sw, dt["baseline"] * sh), date_text, font=datef, anchor="ms", fill=rgb(dt["colour"]))
 
     b = lay["binary"]
     if b["enabled"]:
