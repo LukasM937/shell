@@ -8,16 +8,15 @@ import qs.utils
 Item {
     id: root
 
+    signal clicked
+
     implicitWidth: Math.round(Tokens.font.body.large.pointSize * 1.2)
     implicitHeight: Math.round(Tokens.font.body.large.pointSize * 1.2)
 
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            const screenState = ShellState.forActive();
-            screenState.launcher = !screenState.launcher;
-        }
+        onClicked: root.clicked()
     }
 
     Loader {

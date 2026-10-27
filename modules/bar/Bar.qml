@@ -75,6 +75,18 @@ ColumnLayout {
         }
     }
 
+    // For popouts opened by clicking instead of hovering
+    function togglePopout(name: string, item: Item): void {
+        if (popouts.hasCurrent && popouts.currentName === name) {
+            popouts.hasCurrent = false;
+            return;
+        }
+
+        popouts.currentName = name;
+        popouts.currentCenter = Qt.binding(() => item.mapToItem(root, 0, item.implicitHeight / 2).y);
+        popouts.hasCurrent = true;
+    }
+
     function handleWheel(y: real, angleDelta: point): void {
         const ch = childAt(width / 2, y) as EntryWrapper;
         if (ch?.entryId === "workspaces" && Config.bar.scrollActions.workspaces) {
@@ -123,7 +135,10 @@ ColumnLayout {
                 roleValue: "logo"
                 delegate: EntryWrapper {
                     OsIcon {
+                        id: osIcon
+
                         objectName: "taskbarLogo"
+                        onClicked: root.togglePopout("system", osIcon)
                     }
                 }
             }
