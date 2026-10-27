@@ -18,15 +18,34 @@ ColumnLayout {
 
     spacing: Tokens.spacing.largeIncreased
 
-    Clock {
+    // Matches the desktop clock when its style has been generated for the wallpaper
+    Loader {
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: Tokens.padding.large
-        centerScale: root.centerScale
+
+        sourceComponent: ClockStyle.available ? desktopStyleClock : stockClock
+    }
+
+    Component {
+        id: stockClock
+
+        Clock {
+            centerScale: root.centerScale
+        }
+    }
+
+    Component {
+        id: desktopStyleClock
+
+        DesktopStyleClock {
+            centerWidth: root.centerWidth
+        }
     }
 
     StyledText {
         Layout.alignment: Qt.AlignHCenter
 
+        visible: !ClockStyle.available
         text: Time.format("dddd • d MMM").toUpperCase()
         color: Colours.palette.m3onSurface
         font: Tokens.font.title.builders.medium.weight(Font.DemiBold).build()

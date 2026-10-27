@@ -2,9 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Effects
-import QtQuick.Shapes
 import Quickshell
-import Quickshell.Io
 import Caelestia.Config
 import Caelestia.I18n
 import qs.components
@@ -18,7 +16,7 @@ import qs.utils
 Item {
     id: root
 
-    property var layout: ({})
+    readonly property var layout: ClockStyle.layout
     readonly property var timeConf: layout.time ?? {}
     readonly property var dayConf: layout.day ?? {}
     readonly property var dateConf: layout.date ?? {}
@@ -75,46 +73,17 @@ Item {
             y: (root.dayConf.baseline ?? 0.3) * root.height - baselineOffset
         }
 
-        Text {
-            id: time
-
-            readonly property bool outline: root.timeConf.style === "outline"
-
+        OutlineText {
             text: Tr.formatDateTime(clock.date, Units.twelveHourClock ? "h:mm" : "hh:mm")
-            color: outline ? "transparent" : `#${root.timeConf.colour ?? "ffffff"}`
+            colour: `#${root.timeConf.colour ?? "ffffff"}`
+            outline: root.timeConf.style === "outline"
+            strokeWidth: Math.max(1, (root.timeConf.stroke ?? 0.004) * root.height)
             font.family: root.timeConf.font ?? ""
             font.pixelSize: Math.max(1, (root.timeConf.size ?? 0.3) * root.height)
             font.weight: root.timeConf.weight ?? Font.Bold
             font.variableAxes: root.timeConf.axes ?? {}
             x: (root.timeConf.cx ?? 0.5) * root.width - implicitWidth / 2
             y: (root.timeConf.baseline ?? 0.6) * root.height - baselineOffset
-        }
-
-        TextMetrics {
-            id: timeMetrics
-
-            font: time.font
-            text: time.text
-        }
-
-        // Outline style: the glyph paths stroked. PathText starts at the ink's top edge.
-        Shape {
-            visible: time.outline
-            x: time.x
-            y: time.y + time.baselineOffset + timeMetrics.tightBoundingRect.y
-            preferredRendererType: Shape.CurveRenderer
-
-            ShapePath {
-                strokeColor: `#${root.timeConf.colour ?? "ffffff"}`
-                strokeWidth: Math.max(1, (root.timeConf.stroke ?? 0.004) * root.height)
-                fillColor: "transparent"
-                joinStyle: ShapePath.RoundJoin
-
-                PathText {
-                    text: time.text
-                    font: time.font
-                }
-            }
         }
     }
 
@@ -253,20 +222,5 @@ Item {
                 }
             }
         }
-    }
-
-    FileView {
-        path: `${Paths.state}/depth-clock/layout.json`
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: {
-            try {
-                root.layout = JSON.parse(text());
-            } catch (e) {
-                root.layout = {};
-            }
-        }
-        onLoadFailed: root.layout = {}
     }
 }
