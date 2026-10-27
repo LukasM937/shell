@@ -12,7 +12,7 @@ StyledRect {
     id: root
 
     color: Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
-    radius: Tokens.rounding.extraLargeIncreased
+    radius: Tokens.rounding.medium
     implicitHeight: header.anchors.margins + header.implicitHeight + Tokens.spacing.medium + layout.implicitHeight + layout.anchors.bottomMargin
 
     RowLayout {

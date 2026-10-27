@@ -24,7 +24,7 @@ StyledRect {
     }
 
     implicitHeight: layout.implicitHeight + Tokens.padding.large * 2
-    radius: Tokens.rounding.extraLarge
+    radius: Tokens.rounding.medium
     color: Colours.tPalette.m3surfaceContainer
 
     ServiceRef {

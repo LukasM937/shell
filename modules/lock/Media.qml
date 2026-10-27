@@ -15,7 +15,7 @@ StyledClippingRect {
     required property var lock
 
     implicitHeight: layout.implicitHeight + layout.anchors.margins * 2
-    radius: Tokens.rounding.extraLarge
+    radius: Tokens.rounding.medium
     color: Colours.tPalette.m3surfaceContainer
 
     FadeImage {
