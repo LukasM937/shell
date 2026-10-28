@@ -1,6 +1,5 @@
 import QtQuick
 import Caelestia.Config
-import Caelestia.Models
 import Caelestia.Multimedia
 import Caelestia.State
 import qs.components
@@ -10,12 +9,32 @@ import qs.services
 Item {
     id: root
 
-    required property FileSystemEntry modelData
+    required property var modelData // A FileSystemEntry, or a WallpaperDiscover result with online set
     required property ScreenState screenState
+
+    function activate(): void {
+        if (modelData.online) {
+            WallpaperDiscover.fetch(modelData);
+        } else {
+            if (Colours.scheme === "dynamic" && modelData.path !== Wallpapers.actualCurrent)
+                Wallpapers.previewColourLock = true;
+            Wallpapers.setWallpaper(modelData.path);
+        }
+        screenState.launcher = false;
+    }
 
     scale: 0.5
     opacity: 0
     z: PathView.z ?? 0 // qmllint disable missing-property
+
+    transform: Rotation {
+        origin.x: root.width / 2
+        origin.y: root.height / 2
+        axis.x: 0
+        axis.y: 1
+        axis.z: 0
+        angle: root.PathView.angle ?? 0 // qmllint disable missing-property
+    }
 
     Component.onCompleted: {
         scale = Qt.binding(() => PathView.isCurrentItem ? 1 : PathView.onPath ? 0.8 : 0);
@@ -29,10 +48,7 @@ Item {
         id: stateLayer
 
         radius: Tokens.rounding.large
-        onClicked: {
-            Wallpapers.setWallpaper(root.modelData.path);
-            root.screenState.launcher = false;
-        }
+        onClicked: root.activate()
     }
 
     Elevation {
@@ -84,8 +100,15 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         renderType: Text.QtRendering
-        text: root.modelData.relativePath
+        text: root.modelData.online ? `${root.modelData.author || root.modelData.provider} · ${root.modelData.size}` : root.modelData.relativePath
         font: Tokens.font.label.medium
+        opacity: root.PathView.isCurrentItem ? 1 : 0
+
+        Behavior on opacity {
+            Anim {
+                type: Anim.DefaultEffects
+            }
+        }
     }
 
     Behavior on scale {

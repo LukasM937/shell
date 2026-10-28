@@ -24,6 +24,7 @@ ShellRoot {
         Notifs;
         Players;
         Brightness;
+        WallpaperDiscover; // Changes the wallpaper daily or by time of day if asked to
         Weather.reload();
 
         if (GlobalConfig.utilities.vpn.enabled)
