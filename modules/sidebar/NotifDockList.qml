@@ -123,6 +123,7 @@ LazyListView {
                 props: root.props
                 container: root.container
                 screenState: root.screenState
+                onCloseAllRequested: notif.closeAll()
             }
 
             Behavior on y {

@@ -44,11 +44,6 @@ StyledRect {
 
     property bool expanded
 
-    function closeAll(): void {
-        for (const n of notifs.filter(n => !n.closed))
-            n.close();
-    }
-
     anchors.left: parent?.left
     anchors.right: parent?.right
     implicitHeight: content.implicitHeight + Tokens.padding.medium * 2
@@ -221,25 +216,6 @@ StyledRect {
                         Anim {}
                     }
                 }
-
-                StyledRect {
-                    implicitWidth: implicitHeight
-                    implicitHeight: groupCount.implicitHeight + Tokens.padding.extraSmall
-
-                    color: root.urgency === "critical" ? Colours.palette.m3error : Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
-                    radius: Tokens.rounding.full
-
-                    StateLayer {
-                        color: root.urgency === "critical" ? Colours.palette.m3onError : Colours.palette.m3onSurface
-                        onClicked: root.closeAll()
-                    }
-
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: "close"
-                        color: root.urgency === "critical" ? Colours.palette.m3onError : Colours.palette.m3onSurface
-                    }
-                }
             }
 
             Repeater {
@@ -271,6 +247,28 @@ StyledRect {
                             property: "preferredHeight"
                             from: 0
                             to: notif.implicitHeight
+                        }
+                    }
+
+                    ParallelAnimation {
+                        running: notif.modelData.closed
+                        onFinished: notif.modelData.unlock(notif)
+
+                        Anim {
+                            type: Anim.DefaultEffects
+                            target: notif
+                            property: "opacity"
+                            to: 0
+                        }
+                        Anim {
+                            target: notif
+                            property: "scale"
+                            to: 0.7
+                        }
+                        Anim {
+                            target: notif.Layout
+                            property: "preferredHeight"
+                            to: 0
                         }
                     }
                 }
@@ -313,7 +311,6 @@ StyledRect {
         required property NotifData modelData
 
         Layout.fillWidth: true
-        rightPadding: lineClose.implicitWidth + Tokens.spacing.small
         textFormat: Text.MarkdownText
         text: {
             const summary = modelData.summary.replace(/\n/g, " ");
@@ -334,72 +331,12 @@ StyledRect {
         Component.onCompleted: modelData.lock(this)
         Component.onDestruction: modelData.unlock(this)
 
-        HoverHandler {
-            id: lineHover
-        }
-
-        StyledRect {
-            id: lineClose
-
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            implicitWidth: lineCloseIcon.implicitHeight
-            implicitHeight: lineCloseIcon.implicitHeight
-
-            radius: Tokens.rounding.full
-            color: "transparent"
-            opacity: lineHover.hovered ? 1 : 0
-
-            StateLayer {
-                color: notifLine.color
-                onClicked: notifLine.modelData.close()
-            }
-
-            MaterialIcon {
-                id: lineCloseIcon
-
-                anchors.centerIn: parent
-                text: "close"
-                color: notifLine.color
-                fontStyle: Tokens.font.icon.small
-            }
-
-            Behavior on opacity {
-                Anim {
-                    type: Anim.DefaultEffects
-                }
-            }
-        }
-
-        ParallelAnimation {
-            running: notifLine.modelData.closed
-            onFinished: notifLine.modelData.unlock(notifLine)
-
-            Anim {
-                type: Anim.DefaultEffects
-                target: notifLine
-                property: "opacity"
-                to: 0
-            }
-            Anim {
-                target: notifLine
-                property: "scale"
-                to: 0.7
-            }
-            Anim {
-                target: notifLine.Layout
-                property: "preferredHeight"
-                from: notifLine.height
-                to: 0
-            }
-        }
-
         TextMetrics {
             id: metrics
 
             text: `${notifLine.modelData.summary} ${notifLine.modelData.body}`.replace(/\n/g, " ")
             font: notifLine.font
-            elideWidth: notifLine.width - notifLine.rightPadding
+            elideWidth: notifLine.width
             elide: Text.ElideRight
         }
     }

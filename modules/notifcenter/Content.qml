@@ -82,6 +82,8 @@ ColumnLayout {
                 props: root.props
                 screenState: root.screenState
                 container: view
+                // Keep every group loaded: unloaded ones have estimated heights, which made scrolling jump back
+                cacheBuffer: 100000
             }
         }
 

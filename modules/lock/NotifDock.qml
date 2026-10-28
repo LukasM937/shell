@@ -8,7 +8,6 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.components.containers
-import qs.components.controls
 import qs.components.effects
 import qs.services
 import qs.utils
@@ -23,28 +22,12 @@ ColumnLayout {
 
     spacing: Tokens.spacing.medium
 
-    RowLayout {
+    StyledText {
         Layout.fillWidth: true
-        spacing: Tokens.spacing.small
-
-        StyledText {
-            Layout.fillWidth: true
-            text: Notifs.notClosed.length > 0 ? Tr.trN("%n notification", "%n notifications", Notifs.notClosed.length) : Tr.tr("Notifications")
-            color: Colours.palette.m3outline
-            font: Tokens.font.mono.builders.small.weight(Font.Medium).build()
-            elide: Text.ElideRight
-        }
-
-        IconButton {
-            type: IconButton.Text
-            icon: "clear_all"
-            visible: !Config.lock.hideNotifs
-            disabled: Notifs.notClosed.length === 0
-            onClicked: {
-                for (const n of Notifs.notClosed)
-                    n.close();
-            }
-        }
+        text: Notifs.list.length > 0 ? Tr.trN("%n notification", "%n notifications", Notifs.list.length) : Tr.tr("Notifications")
+        color: Colours.palette.m3outline
+        font: Tokens.font.mono.builders.small.weight(Font.Medium).build()
+        elide: Text.ElideRight
     }
 
     ClipRect {
