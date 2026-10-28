@@ -79,6 +79,12 @@ class LauncherConfig : public settings::ObjectNode {
                 { u"command"_s, QStringList{ u"autocomplete"_s, u"variant"_s } },
             }),
             vmap({
+                { u"name"_s, markCtx(u"Keybinds"_s, u"launcher action"_s) },
+                { u"icon"_s, u"keyboard"_s },
+                { u"description"_s, mark(u"Show keyboard shortcuts"_s) },
+                { u"command"_s, QStringList{ u"autocomplete"_s, u"keys"_s } },
+            }),
+            vmap({
                 { u"name"_s, markCtx(u"Random"_s, u"launcher action"_s) },
                 { u"icon"_s, u"casino"_s },
                 { u"description"_s, mark(u"Switch to a random wallpaper"_s) },

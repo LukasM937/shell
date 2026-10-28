@@ -29,7 +29,7 @@ StyledListView {
     function stateForText(text: string): string {
         const prefix = GlobalConfig.launcher.actionPrefix;
         if (text.startsWith(prefix)) {
-            for (const action of ["calc", "scheme", "variant"])
+            for (const action of ["calc", "scheme", "variant", "keys"])
                 if (text.startsWith(`${prefix}${action} `))
                     return action;
 
@@ -49,6 +49,8 @@ StyledListView {
             return Schemes.query(text);
         case "variant":
             return M3Variants.query(text);
+        case "keys":
+            return Keybinds.query(text);
         default:
             return Apps.search(text);
         }
@@ -87,6 +89,8 @@ StyledListView {
     onStateChanged: {
         if (state === "scheme" || state === "variant")
             Schemes.reload();
+        else if (state === "keys")
+            Keybinds.reload();
     }
 
     Component.onCompleted: displayText = search.text
@@ -125,6 +129,13 @@ StyledListView {
 
             PropertyChanges {
                 root.delegate: variantItem
+            }
+        },
+        State {
+            name: "keys"
+
+            PropertyChanges {
+                root.delegate: keybindItem
             }
         }
     ]
@@ -283,6 +294,14 @@ StyledListView {
         id: variantItem
 
         VariantItem {
+            list: root
+        }
+    }
+
+    Component {
+        id: keybindItem
+
+        KeybindItem {
             list: root
         }
     }
