@@ -34,10 +34,20 @@ StyledRect {
         if (root.lock.unlocking)
             return;
 
+        // The arrow keys play the game in the notification dock, the rest go to the password
+        if (root.lock.runnerGame?.handleKey(event, true)) {
+            event.accepted = true;
+            return;
+        }
+
         if (event.key === Qt.Key_Enter || event.key === Qt.Key_Return)
             inputField.placeholder.animate = false;
 
         root.lock.pam.handleKey(event);
+    }
+    Keys.onReleased: event => {
+        if (root.lock.runnerGame?.handleKey(event, false))
+            event.accepted = true;
     }
 
     Behavior on implicitWidth {

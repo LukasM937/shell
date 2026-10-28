@@ -8,9 +8,7 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.components.containers
-import qs.components.effects
 import qs.services
-import qs.utils
 
 ColumnLayout {
     id: root
@@ -48,17 +46,10 @@ ColumnLayout {
             sourceComponent: ColumnLayout {
                 spacing: Tokens.spacing.largeIncreased
 
-                Image {
-                    asynchronous: true
-                    source: Paths.absolutePath(Config.paths.lockNoNotifsPic)
-                    fillMode: Image.PreserveAspectFit
-                    sourceSize.width: clipRect.width * 0.8 * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
-
-                    layer.enabled: true
-                    layer.effect: Colouriser {
-                        colorizationColor: Colours.palette.m3outlineVariant
-                        brightness: 1
-                    }
+                RunnerGame {
+                    lock: root.lock
+                    Layout.preferredWidth: clipRect.width
+                    Layout.preferredHeight: Math.min(clipRect.width * 0.5, clipRect.height * 0.7)
                 }
 
                 StyledText {
