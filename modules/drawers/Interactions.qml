@@ -4,6 +4,7 @@ import Quickshell
 import Caelestia.Config
 import qs.components
 import qs.components.controls
+import qs.services
 import qs.modules.bar as Bar
 import qs.modules.bar.popouts as BarPopouts
 
@@ -22,6 +23,7 @@ CustomMouseArea {
     property bool dashboardShortcutActive
     property bool osdShortcutActive
     property bool utilitiesShortcutActive
+    property bool notifCenterShortcutActive
     property bool sidebarShortcutActive
 
     function withinPanelHeight(panel: Item, x: real, y: real): bool {
@@ -78,6 +80,9 @@ CustomMouseArea {
 
             if (!utilitiesShortcutActive)
                 screenState.utilities = false;
+
+            if (!notifCenterShortcutActive)
+                screenState.notifCenter = false;
 
             if (!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) {
                 popouts.hasCurrent = false;
@@ -241,6 +246,17 @@ CustomMouseArea {
             utilitiesShortcutActive = false;
         }
 
+        // Show notification center on hover, but only open it while no popups are showing
+        const showNotifCenter = inTopPanel(panels.notifCenter, x, y) && (screenState.notifCenter || !Notifs.popups.some(n => !n.closed));
+
+        // Always update visibility based on hover if not in shortcut mode
+        if (!notifCenterShortcutActive) {
+            screenState.notifCenter = showNotifCenter;
+        } else if (showNotifCenter) {
+            // If hovering over notification center area while in shortcut mode, transition to hover control
+            notifCenterShortcutActive = false;
+        }
+
         // Show popouts on hover
         if (x < bar.implicitWidth) {
             bar.checkPopout(y);
@@ -297,6 +313,19 @@ CustomMouseArea {
             } else {
                 // OSD hidden, clear shortcut flag
                 root.osdShortcutActive = false;
+            }
+        }
+
+        function onNotifCenterChanged() {
+            if (root.screenState.notifCenter) {
+                // Notification center became visible, immediately check if this should be shortcut mode
+                const inNotifCenterArea = root.inTopPanel(root.panels.notifCenter, root.mouseX, root.mouseY);
+                if (!inNotifCenterArea) {
+                    root.notifCenterShortcutActive = true;
+                }
+            } else {
+                // Notification center hidden, clear shortcut flag
+                root.notifCenterShortcutActive = false;
             }
         }
 

@@ -10,6 +10,7 @@ PersistentProperties {
     property bool launcher
     property bool dashboard
     property bool utilities
+    property bool notifCenter
     property bool sidebar
 
     // Dashboard state
