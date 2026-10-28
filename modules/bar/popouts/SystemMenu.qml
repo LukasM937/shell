@@ -25,7 +25,7 @@ ColumnLayout {
             Quickshell.execDetached(command);
     }
 
-    width: Tokens.sizes.bar.batteryWidth
+    width: Tokens.sizes.bar.networkWidth
     spacing: Tokens.spacing.small
 
     Component.onCompleted: SystemUpdates.refresh(false)
@@ -72,17 +72,19 @@ ColumnLayout {
 
     ActionRow {
         icon: SystemUpdates.count > 0 ? "system_update_alt" : "verified"
-        text: {
-            if (SystemUpdates.checking)
+        text: Tr.tr("Update system")
+        subtext: {
+            const updates = SystemUpdates;
+            if (updates.checking)
                 return Tr.tr("Checking for updates...");
-            if (SystemUpdates.count < 0)
-                return Tr.tr("Update system");
-            if (SystemUpdates.count === 0)
-                return Tr.tr("System is up to date");
-            if (SystemUpdates.aur > 0)
-                // TRANSLATORS: %1 = all pending updates, %2 = how many of them are from the AUR
-                return Tr.tr("Update system (%1, %2 AUR)").arg(SystemUpdates.count).arg(SystemUpdates.aur);
-            return Tr.tr("Update system (%1)").arg(SystemUpdates.count);
+            if (updates.count < 0)
+                return "";
+            if (updates.count === 0)
+                return Tr.tr("Up to date");
+            if (updates.aur > 0)
+                // TRANSLATORS: %1 = pending updates, %2 = how many of them come from the AUR
+                return Tr.trN("%n update, %1 from the AUR", "%n updates, %1 from the AUR", updates.count).arg(updates.aur);
+            return Tr.trN("%n update", "%n updates", updates.count);
         }
         highlighted: SystemUpdates.count > 0
         onClicked: {
@@ -162,6 +164,7 @@ ColumnLayout {
 
         property alias icon: rowIcon.text
         property alias text: rowLabel.text
+        property alias subtext: rowSubtext.text
         property bool highlighted
 
         signal clicked
@@ -191,13 +194,28 @@ ColumnLayout {
                 color: row.highlighted ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
             }
 
-            StyledText {
-                id: rowLabel
-
+            ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.fillWidth: true
-                color: row.highlighted ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
-                elide: Text.ElideRight
+                spacing: 0
+
+                StyledText {
+                    id: rowLabel
+
+                    Layout.fillWidth: true
+                    color: row.highlighted ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
+                    elide: Text.ElideRight
+                }
+
+                StyledText {
+                    id: rowSubtext
+
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    color: row.highlighted ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurfaceVariant
+                    font: Tokens.font.body.small
+                    elide: Text.ElideRight
+                }
             }
         }
     }

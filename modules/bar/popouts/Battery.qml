@@ -39,7 +39,7 @@ Column {
     }
 
     spacing: Tokens.spacing.medium
-    width: Tokens.sizes.bar.batteryWidth
+    width: UPower.displayDevice.isLaptopBattery ? Tokens.sizes.bar.batteryWidth : Tokens.sizes.bar.networkWidth
 
     // Desktops have no battery and power profiles matter little there, so offer keep awake instead
     IdleInhibit {
