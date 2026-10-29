@@ -12,6 +12,10 @@ Scope {
     WlSessionLock {
         id: lock
 
+        // For the game in the empty notification dock, kept between locks
+        property int runnerBest
+        property int runnerCharacter
+
         signal unlock
 
         LockSurface {
