@@ -107,7 +107,12 @@ Item {
             }
         }
 
-        Component.onCompleted: forceActiveFocus()
+        onTextChanged: root.screenState.launcherText = text
+
+        Component.onCompleted: {
+            text = root.screenState.launcherText;
+            forceActiveFocus();
+        }
 
         Connections {
             function onLauncherChanged(): void {
@@ -118,6 +123,10 @@ Item {
             function onSessionChanged(): void {
                 if (!root.screenState.session)
                     search.forceActiveFocus();
+            }
+
+            function onLauncherTextChanged(): void {
+                search.text = root.screenState.launcherText;
             }
 
             target: root.screenState

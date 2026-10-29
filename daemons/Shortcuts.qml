@@ -63,6 +63,25 @@ Scope {
     // qmllint disable unresolved-type
     CustomShortcut {
         // qmllint enable unresolved-type
+        name: "keybinds"
+        description: "Show keybinds"
+        onPressed: {
+            if (root.hasFullscreen)
+                return;
+            const screenState = ShellState.forActive();
+            const text = `${GlobalConfig.launcher.actionPrefix}keys `;
+            if (screenState.launcher && screenState.launcherText.startsWith(text)) {
+                screenState.launcher = false;
+            } else {
+                screenState.launcherText = text;
+                screenState.launcher = true;
+            }
+        }
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
         name: "launcher"
         description: "Toggle launcher"
         onPressed: root.launcherInterrupted = false
