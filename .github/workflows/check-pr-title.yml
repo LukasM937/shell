@@ -1,12 +1,8 @@
 name: Check PR title
 
+# CI is switched off in this fork (see CLAUDE.md). Manual runs only.
 on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - edited
-      - synchronize
+  workflow_dispatch:
 
 permissions:
   contents: read

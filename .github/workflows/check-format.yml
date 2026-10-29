@@ -1,10 +1,8 @@
 name: Check formatting
 
+# CI is switched off in this fork (see CLAUDE.md). Manual runs only.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   changes:

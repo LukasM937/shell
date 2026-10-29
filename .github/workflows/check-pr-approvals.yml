@@ -1,18 +1,8 @@
 name: Check PR approvals
 
+# CI is switched off in this fork (see CLAUDE.md). Manual runs only.
 on:
-  pull_request_target:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
-      - labeled
-  pull_request_review:
-    types:
-      - submitted
-      - edited
-      - dismissed
+  workflow_dispatch:
 
 permissions:
   pull-requests: read
