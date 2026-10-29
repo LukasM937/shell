@@ -11,12 +11,8 @@ Item {
     readonly property real controlScale: Math.max(0.75, ui)
     readonly property int centerWidth: Math.round(600 * ui)
     readonly property var user: users[userIndex] ?? null
-    readonly property var faces: {
-        if (!user)
-            return [];
-        const icon = user.icon.startsWith("/") ? `file://${user.icon}` : user.icon;
-        return [Qt.resolvedUrl(`faces/${user.name}`), icon].filter(s => s);
-    }
+    // Only the picture sync.py copied: the default picture SDDM falls back to would hide the mascot
+    readonly property var faces: user ? [Qt.resolvedUrl(`faces/${user.name}`)] : []
     readonly property string hint: {
         const lines = [];
         if (keyboard.capsLock)
@@ -201,24 +197,9 @@ Item {
         opacity: panel.opacity
         scale: panel.scale
 
-        Clock {
+        Loader {
             Layout.alignment: Qt.AlignHCenter
-            now: root.now
-            ui: root.ui
-        }
-
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: Qt.locale().toString(root.now, "dddd • d MMM").toUpperCase()
-            color: Theme.m3onSurface
-            renderType: Text.NativeRendering
-            font.family: Theme.sans
-            font.pointSize: 16
-            font.variableAxes: ({
-                    "wght": 600,
-                    "ROND": 25,
-                    "opsz": 16
-                })
+            sourceComponent: Theme.desktopClock ? desktopClock : stockClock
         }
 
         Item {
@@ -231,9 +212,11 @@ Item {
                 id: avatar
 
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Math.round(root.centerWidth * Math.min(0.7, root.ui * 0.9 + 0.05))
+                width: Math.round(root.centerWidth * 0.45)
                 height: width
                 sources: root.faces
+                mascot: Theme.mascot
+                mascotSpeed: Theme.mascotSpeed
             }
 
             IconButton {
@@ -448,6 +431,43 @@ Item {
             property: "shake"
             to: 0
             duration: 60
+        }
+    }
+
+    Component {
+        id: stockClock
+
+        ColumnLayout {
+            spacing: Theme.spacingLarge
+
+            Clock {
+                Layout.alignment: Qt.AlignHCenter
+                now: root.now
+                ui: root.ui
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: Qt.locale().toString(root.now, "dddd • d MMM").toUpperCase()
+                color: Theme.m3onSurface
+                renderType: Text.NativeRendering
+                font.family: Theme.sans
+                font.pointSize: 16
+                font.variableAxes: ({
+                        "wght": 600,
+                        "ROND": 25,
+                        "opsz": 16
+                    })
+            }
+        }
+    }
+
+    Component {
+        id: desktopClock
+
+        DesktopClock {
+            now: root.now
+            centerWidth: root.centerWidth
         }
     }
 }

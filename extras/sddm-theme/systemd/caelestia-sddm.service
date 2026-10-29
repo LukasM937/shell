@@ -3,4 +3,5 @@ Description=Update the SDDM theme from the Caelestia scheme
 
 [Service]
 Type=oneshot
+Environment=CAELESTIA_SHELL_DIR=@SHELL@
 ExecStart=/usr/bin/python3 @SYNC@

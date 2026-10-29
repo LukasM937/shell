@@ -21,16 +21,19 @@ if [[ ${1:-} == --uninstall ]]; then
     exit 0
 fi
 
-sudo install -d -m 755 "$theme" "$theme/fonts"
+sudo install -d -m 755 "$theme"
 sudo install -m 644 "$src"/*.qml "$src"/{qmldir,metadata.desktop,theme.conf} "$theme/"
 [[ -f $src/preview.png ]] && sudo install -m 644 "$src/preview.png" "$theme/"
+# What sync.py updates without root: the greeter only reads these, but you own them. The font of the theme stays
+# in fonts/ next to the ones of the depth clock
+sudo install -d -m 755 -o "$me" "$theme/faces" "$theme/fonts"
 sudo install -m 644 "$repo/assets/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf" "$theme/fonts/GoogleSansFlex.ttf"
 
-# What sync.py updates without root: the greeter only reads these, but you own them
-sudo install -d -m 755 -o "$me" "$theme/faces"
 for file in theme.conf.user background; do
     [[ -e $theme/$file ]] || sudo install -m 644 -o "$me" /dev/null "$theme/$file"
 done
+# The picture until sync.py finds the one of your session menu
+[[ -e $theme/mascot ]] || sudo install -m 644 -o "$me" "$repo/assets/kurukuru.gif" "$theme/mascot"
 
 sudo install -d -m 755 "$(dirname "$conf")"
 printf '[Theme]\nCurrent=caelestia\n' | sudo tee "$conf" >/dev/null
@@ -41,9 +44,9 @@ fi
 mkdir -p "$data" "$units"
 cp "$src/sync.py" "$data/"
 cp "$src"/systemd/caelestia-sddm.path "$units/"
-sed "s#@SYNC@#$data/sync.py#" "$src/systemd/caelestia-sddm.service" > "$units/caelestia-sddm.service"
+sed "s#@SYNC@#$data/sync.py#; s#@SHELL@#$repo#" "$src/systemd/caelestia-sddm.service" > "$units/caelestia-sddm.service"
 systemctl --user daemon-reload
 systemctl --user enable --now caelestia-sddm.path
-python3 "$data/sync.py" --theme "$theme"
+CAELESTIA_SHELL_DIR=$repo python3 "$data/sync.py" --theme "$theme"
 
 echo "Done. Preview without logging out: sddm-greeter-qt6 --test-mode --theme $theme"
