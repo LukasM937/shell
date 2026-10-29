@@ -75,6 +75,8 @@ Item {
             leftHeld = pressed;
         else if (key === Qt.Key_Right)
             rightHeld = pressed;
+        else if (key === Qt.Key_Down)
+            ducking = pressed;
         stepDir = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
 
         if (phase !== "running") {
@@ -85,8 +87,6 @@ Item {
                 // The short pause after a crash keeps a panicked jump from restarting right away
                 start();
             }
-        } else if (key === Qt.Key_Down) {
-            ducking = pressed;
         } else if (key === Qt.Key_Up && pressed && runnerY === 0) {
             velocity = jumpVelocity;
             runnerY = 0.01;
@@ -112,7 +112,6 @@ Item {
         runnerX = 10;
         runnerY = 0.01; // Starts with a hop
         velocity = jumpVelocity;
-        ducking = false;
         phase = "running";
     }
 
