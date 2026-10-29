@@ -1,0 +1,12 @@
+[SddmGreeterTheme]
+Name=Caelestia
+Description=Login screen in the look of the Caelestia shell's lock screen
+Author=Caelestia fork
+Type=sddm-theme
+Version=1.0
+Screenshot=preview.png
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=caelestia
+Theme-API=2.0
+QTVersion=6

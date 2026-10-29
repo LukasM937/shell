@@ -162,6 +162,11 @@ You can view the list of available IPC commands by running `caelestia shell -s`.
 The launcher can list your Hyprland keybinds. It has no default key; see [the keybind overview](docs/keybind-overview.md)
 for how to bind and use it.
 
+### Login screen
+
+`extras/sddm-theme` is an SDDM theme in the look of the lock screen, with your scheme, wallpaper and profile picture.
+See [the SDDM theme](docs/sddm-theme.md).
+
 ### PFP/Wallpapers
 
 The profile picture for the dashboard is read from the file `~/.face`. You can set it by clicking it in the dashboard,

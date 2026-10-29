@@ -1,0 +1,6 @@
+[Unit]
+Description=Update the SDDM theme from the Caelestia scheme
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 @SYNC@
