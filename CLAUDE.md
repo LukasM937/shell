@@ -18,6 +18,7 @@ python3 scripts/qml-lint-conventions.py   # property/child ordering in QML objec
 python3 scripts/trs-check.py              # translation helper misuse
 qmlformat <file.qml> | diff -u <file.qml> -   # no output means formatted
 clang-format --dry-run --Werror <file>    # C++ only, needs clang-format 20+
+node scripts/runner-check.js              # lock screen game: no map may be unwinnable, run after touching modules/lock/runner.js
 ```
 
 `qmlformat` without a Qt install: `python3 -m venv v && v/bin/pip install PySide6-Essentials`, then use
