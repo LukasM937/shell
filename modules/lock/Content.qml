@@ -30,11 +30,6 @@ RowLayout {
             Layout.fillHeight: true
             lock: root.lock
         }
-
-        SessionControls {
-            Layout.fillWidth: true
-            visible: GlobalConfig.lock.enableSessionControls
-        }
     }
 
     Center {
