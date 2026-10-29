@@ -25,6 +25,9 @@ Scope {
     readonly property alias howdy: howdy
 
     property string lockMessage
+    property real lockedUntil // When a faillock lockout is over at the latest, 0 if there is none or its end is unknown
+    property int lockMinutesLeft
+    property bool lockReported
     property int state
     property string buffer
 
@@ -46,6 +49,7 @@ Scope {
             howdy.abort();
 
         if (event.key === Qt.Key_Enter || event.key === Qt.Key_Return) {
+            lockReported = false;
             passwd.start();
         } else if (event.key === Qt.Key_Backspace) {
             if (event.modifiers & Qt.ControlModifier) {
@@ -80,10 +84,19 @@ Scope {
         configDirectory: Quickshell.shellPath("assets/pam.d")
 
         onMessageChanged: {
-            if (message.startsWith("The account is locked"))
+            if (message.startsWith("The account is locked")) {
                 root.lockMessage = message;
-            else if (root.lockMessage && message.endsWith(" left to unlock)"))
-                root.lockMessage += "\n" + message;
+                root.lockReported = true;
+            } else if (root.lockMessage && message.endsWith(" left to unlock)")) {
+                // faillock rounds the time left up to whole minutes, so this is when the lockout is over at the latest
+                const minutes = message.match(/\((\d+) minutes? left/)?.[1];
+                if (minutes) {
+                    root.lockMinutesLeft = parseInt(minutes);
+                    root.lockedUntil = Date.now() + minutes * 60000;
+                } else if (!root.lockMessage.includes(message)) {
+                    root.lockMessage += "\n" + message;
+                }
+            }
         }
 
         onResponseRequiredChanged: {
@@ -98,6 +111,12 @@ Scope {
             if (res === PamResult.Success)
                 return root.lock.unlock();
 
+            // An attempt that wasn't refused for a lockout means there is none (anymore)
+            if (!root.lockReported) {
+                root.lockMessage = "";
+                root.lockedUntil = 0;
+            }
+
             root.clearTransientState();
 
             if (res === PamResult.Error)
@@ -109,6 +128,22 @@ Scope {
 
             root.flashMsg();
             pwdStateReset.restart();
+        }
+    }
+
+    Timer {
+        // Counts a lockout down and clears its message once it is over
+        running: root.lockedUntil > 0
+        interval: 1000
+        repeat: true
+        onTriggered: {
+            const left = root.lockedUntil - Date.now();
+            if (left > 0) {
+                root.lockMinutesLeft = Math.ceil(left / 60000);
+            } else {
+                root.lockedUntil = 0;
+                root.lockMessage = "";
+            }
         }
     }
 
@@ -161,6 +196,7 @@ Scope {
                 root.buffer = "";
                 root.state = Pam.None;
                 root.lockMessage = "";
+                root.lockedUntil = 0;
             }
         }
 
