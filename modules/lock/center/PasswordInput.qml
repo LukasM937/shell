@@ -34,7 +34,7 @@ StyledRect {
         if (root.lock.unlocking)
             return;
 
-        // The arrow keys play the game in the notification dock, the rest go to the password
+        // The arrow and modifier keys play the game in the notification dock, the rest go to the password
         if (root.lock.runnerGame?.handleKey(event, true)) {
             event.accepted = true;
             return;

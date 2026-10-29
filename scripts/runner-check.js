@@ -53,11 +53,10 @@ function worldFrames(world, seed, frames) {
 
 // What the runner can do: do nothing first, since that is what mostly works, then everything else
 function moves(s) {
-    const dirs = s.world === "penguin" ? [0, -1, 1] : [0, -1];
     const out = [];
     for (const jump of s.grounded ? [false, true] : [false])
         for (const duck of [false, true])
-            for (const dir of dirs)
+            for (const dir of [0, -1, 1])
                 out.push({ dir, duck, jump });
     return out;
 }

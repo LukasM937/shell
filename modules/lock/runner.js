@@ -65,6 +65,7 @@ function create(world, worldWidth) {
         ducking: false,
         left: false,
         right: false,
+        fire: false,
         cooldown: 0,
         obstacles: [], // { kind, x, w, lo, hi }, lo and hi being the bottom and top height
         flames: [], // { x, y }, y being the bottom
@@ -124,9 +125,11 @@ function hitbox(s) {
     };
 }
 
-// Arrow keys: "up", "down", "left", "right". Returns whether the game used the key
+// Keys: "up", "down", "left", "right" and "fire". Returns whether the game used the key
 function key(s, name, pressed, seed) {
-    if (name === "left")
+    if (name === "fire")
+        s.fire = pressed;
+    else if (name === "left")
         s.left = pressed;
     else if (name === "right")
         s.right = pressed;
@@ -292,7 +295,7 @@ function scroll(s, dt) {
 
 // The runner moves with the keys, gravity and platforms to stand on or land on
 function run(s, dt) {
-    const dir = (s.right && s.world === "penguin" ? 1 : 0) - (s.left ? 1 : 0);
+    const dir = (s.right ? 1 : 0) - (s.left ? 1 : 0);
     s.x = Math.max(2, Math.min(s.worldWidth * 0.6, s.x + dir * STEP_SPEED * dt));
 
     const floor = support(s, hitbox(s), s.y);
@@ -329,7 +332,7 @@ function step(s, dt) {
     scroll(s, dt);
     run(s, dt);
 
-    if (s.right && s.cooldown === 0 && s.world === "dragon")
+    if (s.fire && s.cooldown === 0 && s.world === "dragon")
         breathe(s);
     for (const f of s.flames)
         f.x += FIRE_SPEED * dt;

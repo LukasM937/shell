@@ -8,9 +8,10 @@ import qs.components
 import qs.services
 
 // A small endless runner for the empty notification dock: a penguin on ice or a dragon in a cave.
-// ↑ jumps, ↓ ducks (or dives mid-air), ← steps back, → steps forward (the dragon breathes fire instead).
+// ↑ jumps, ↓ ducks (or dives mid-air), ← steps back, → steps forward. The dragon breathes fire with Ctrl, Alt or Super,
+// so it can move and fire at once.
 // Raised sections can be jumped onto. Before a run, ← → pick the character.
-// It only ever gets the arrow keys, which the password field ignores. The rules are in runner.js.
+// It only ever gets the arrow and modifier keys, which the password field ignores. The rules are in runner.js.
 Item {
     id: root
 
@@ -31,7 +32,7 @@ Item {
     property int score
     property bool animating
 
-    // Arrow keys from the password field. Returns whether the key was used
+    // Arrow and modifier keys from the password field. Returns whether the key was used
     function handleKey(event: var, pressed: bool): bool {
         const name = keyName(event.key);
         if (!name)
@@ -55,6 +56,13 @@ Item {
             return "left";
         case Qt.Key_Right:
             return "right";
+        case Qt.Key_Control:
+        case Qt.Key_Alt:
+        case Qt.Key_AltGr:
+        case Qt.Key_Meta:
+        case Qt.Key_Super_L:
+        case Qt.Key_Super_R:
+            return "fire";
         default:
             return "";
         }
@@ -273,7 +281,7 @@ Item {
         text: {
             const run = root.phase === "over" ? Tr.tr("Ouch! ↑ to run again") : Tr.tr("↑ to run");
             const other = root.world === "penguin" ? Tr.tr("← → for the dragon") : Tr.tr("← → for the penguin");
-            const fire = Tr.tr("→ breathes fire");
+            const fire = Tr.tr("Ctrl, Alt or Super breathes fire");
             return root.world === "dragon" ? `${run}\n${other}\n${fire}` : `${run}\n${other}`;
         }
         color: Colours.palette.m3outline
