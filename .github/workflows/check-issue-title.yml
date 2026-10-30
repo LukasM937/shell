@@ -1,13 +1,8 @@
 name: Check issue title
 
+# CI is switched off in this fork (see CLAUDE.md). Manual runs only.
 on:
-  issues:
-    types:
-      - opened
-      - edited
-      - reopened
-      - labeled
-      - unlabeled
+  workflow_dispatch:
 
 permissions:
   issues: write

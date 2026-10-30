@@ -1,0 +1,9 @@
+[Unit]
+Description=Update the SDDM theme when the Caelestia scheme or wallpaper changes
+
+[Path]
+PathChanged=%S/caelestia/scheme.json
+PathChanged=%S/caelestia/wallpaper/path.txt
+
+[Install]
+WantedBy=default.target

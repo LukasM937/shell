@@ -1,9 +1,8 @@
 name: Update flake inputs
 
+# CI is switched off in this fork (see CLAUDE.md). Manual runs only.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * 0"
 
 jobs:
   update-flake:

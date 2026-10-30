@@ -93,6 +93,7 @@ Dependencies:
 - [`qt6-m3shapes-git`](https://github.com/soramanew/m3shapes)
 - [`swappy`](https://github.com/jtheoof/swappy)
 - [`fish`](https://github.com/fish-shell/fish-shell)
+- [`lua`](https://www.lua.org) - only for the keybind overview with a Lua Hyprland config
 - [`bash`](https://www.gnu.org/software/bash)
 
 Build dependencies:
@@ -157,6 +158,14 @@ caelestia shell mpris getActive trackTitle
 ```
 
 You can view the list of available IPC commands by running `caelestia shell -s`.
+
+The launcher can list your Hyprland keybinds. It has no default key; see [the keybind overview](docs/keybind-overview.md)
+for how to bind and use it.
+
+### Login screen
+
+`extras/sddm-theme` is an SDDM theme in the look of the lock screen, with your scheme, wallpaper and profile picture.
+See [the SDDM theme](docs/sddm-theme.md).
 
 ### PFP/Wallpapers
 

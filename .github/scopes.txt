@@ -33,3 +33,4 @@ assets
 i18n
 nix
 scripts
+extras

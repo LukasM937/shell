@@ -16,6 +16,7 @@ WlSessionLockSurface {
     required property Pam pam
 
     readonly property alias unlocking: unlockAnim.running
+    property RunnerGame runnerGame
 
     contentItem.Config.screen: screen.name
     contentItem.Tokens.screen: screen.name
