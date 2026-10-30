@@ -105,6 +105,15 @@ Scope {
     // qmllint disable unresolved-type
     CustomShortcut {
         // qmllint enable unresolved-type
+        name: "stayActive"
+        description: "Turn the screen off and keep the computer running"
+        // Turns the mode on rather than toggling it, so pressing it again on the way out never lets the computer sleep
+        onPressed: StayActive.enable()
+    }
+
+    // qmllint disable unresolved-type
+    CustomShortcut {
+        // qmllint enable unresolved-type
         name: "sidebar"
         description: "Toggle sidebar"
         onPressed: {

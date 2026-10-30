@@ -28,6 +28,9 @@ Scope {
         if (!action)
             return;
 
+        if (action === "dpms off" || action === "dpms on")
+            StayActive.screenAsleep = action === "dpms off";
+
         if (action === "lock")
             lock.lock.locked = true;
         else if (action === "unlock")
@@ -71,6 +74,9 @@ Scope {
 
             enabled: {
                 if (!root.enabled || !(modelData.enabled ?? true))
+                    return false;
+                // Stay active keeps the computer running while the screen is off
+                if (StayActive.enabled && root.stopsWork(modelData.idleAction))
                     return false;
                 if (modelData.inhibitWhenAudio && root.hasPlayer)
                     return false;

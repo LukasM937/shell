@@ -10,7 +10,7 @@ import qs.services
 StyledRect {
     id: root
 
-    readonly property real nonAnimHeight: layout.implicitHeight + (RuntimeState.inhibitIdle ? activeChip.implicitHeight + activeChip.anchors.topMargin : 0) + Tokens.padding.extraLargeIncreased
+    readonly property real nonAnimHeight: layout.implicitHeight + stayLayout.implicitHeight + stayLayout.anchors.topMargin + (RuntimeState.inhibitIdle ? activeChip.implicitHeight + activeChip.anchors.topMargin : 0) + Tokens.padding.extraLargeIncreased
 
     implicitHeight: nonAnimHeight
 
@@ -67,6 +67,61 @@ StyledRect {
         StyledSwitch {
             checked: RuntimeState.inhibitIdle
             onToggled: RuntimeState.inhibitIdle = checked
+        }
+    }
+
+    // Stay active: screen off, the computer keeps running (services/StayActive.qml)
+    RowLayout {
+        id: stayLayout
+
+        anchors.top: layout.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.topMargin: Tokens.spacing.medium
+        anchors.leftMargin: Tokens.padding.large
+        anchors.rightMargin: Tokens.padding.large
+        spacing: Tokens.spacing.medium
+
+        StyledRect {
+            implicitWidth: implicitHeight
+            implicitHeight: stayIcon.implicitHeight + Tokens.padding.large
+
+            radius: Tokens.rounding.full
+            color: StayActive.enabled ? Colours.palette.m3secondary : Colours.palette.m3secondaryContainer
+
+            MaterialIcon {
+                id: stayIcon
+
+                anchors.centerIn: parent
+                text: "tv_off"
+                color: StayActive.enabled ? Colours.palette.m3onSecondary : Colours.palette.m3onSecondaryContainer
+                fontStyle: Tokens.font.icon.large
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 0
+
+            StyledText {
+                Layout.fillWidth: true
+                text: Tr.trCtx("Stay active", "stay active")
+                font: Tokens.font.body.medium
+                elide: Text.ElideRight
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: StayActive.automatic ? Tr.trCtx("TV is off, sleep is held back", "stay active") : StayActive.enabled ? Tr.trCtx("Sleep is held back", "stay active") : Tr.trCtx("Screen off, computer stays on", "stay active")
+                color: Colours.palette.m3onSurfaceVariant
+                font: Tokens.font.body.small
+                elide: Text.ElideRight
+            }
+        }
+
+        StyledSwitch {
+            checked: StayActive.enabled
+            onToggled: checked ? StayActive.enable() : StayActive.disable()
         }
     }
 
