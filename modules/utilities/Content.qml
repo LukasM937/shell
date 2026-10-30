@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Layouts
 import Caelestia.Config
 import qs.components
+import qs.services
 import qs.modules.bar.popouts as BarPopouts
 
 Item {
@@ -15,8 +16,8 @@ Item {
     required property BarPopouts.Wrapper popouts
     required property matrix4x4 deformMatrix
 
-    readonly property int enabledCards: (idleInhibit.active ? 1 : 0) + (record.active ? 1 : 0) + (toggles.active ? 1 : 0)
-    readonly property real nonAnimHeight: ((idleInhibit.item as IdleInhibit)?.nonAnimHeight ?? 0) + ((record.item as Record)?.nonAnimHeight ?? 0) + ((toggles.item as Toggles)?.implicitHeight ?? 0) + layout.spacing * Math.max(0, enabledCards - 1)
+    readonly property int enabledCards: (idleInhibit.active ? 1 : 0) + (record.active ? 1 : 0) + (toggles.active ? 1 : 0) + (airPods.active ? 1 : 0)
+    readonly property real nonAnimHeight: ((idleInhibit.item as IdleInhibit)?.nonAnimHeight ?? 0) + ((record.item as Record)?.nonAnimHeight ?? 0) + ((toggles.item as Toggles)?.implicitHeight ?? 0) + ((airPods.item as AirPods)?.implicitHeight ?? 0) + layout.spacing * Math.max(0, enabledCards - 1)
 
     implicitWidth: layout.implicitWidth
     implicitHeight: layout.implicitHeight
@@ -67,6 +68,20 @@ Item {
 
                 screenState: root.screenState
                 popouts: root.popouts
+            }
+        }
+
+        Loader {
+            id: airPods
+
+            Layout.fillWidth: true
+            active: Config.utilities.cards.airPods && LibrePods.available
+            visible: active
+
+            sourceComponent: AirPods {
+                objectName: "utilitiesAirPods"
+
+                screenState: root.screenState
             }
         }
     }
