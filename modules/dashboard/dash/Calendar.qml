@@ -141,7 +141,7 @@ CustomMouseArea {
                     }
 
                     anchors.centerIn: parent
-                    text: grid.title
+                    text: grid.title.replace(String(grid.year), String(grid.year + 10000)) // Human Era (HE): CE + 10000
                     color: Colours.palette.m3primary
                     font: Tokens.font.title.builders.small.capitalisation(Font.Capitalize).build()
                 }
