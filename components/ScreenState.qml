@@ -10,6 +10,7 @@ PersistentProperties {
     property bool launcher
     property bool dashboard
     property bool utilities
+    property bool notifCenter
     property bool sidebar
 
     // Launcher search text, kept in sync with the search bar so it can be opened in a mode

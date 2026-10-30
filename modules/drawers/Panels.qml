@@ -5,6 +5,7 @@ import qs.components
 import qs.modules.bar as Bar
 import qs.modules.dashboard as Dashboard
 import qs.modules.launcher as Launcher
+import qs.modules.notifcenter as NotifCenter
 import qs.modules.notifications as Notifications
 import qs.modules.osd as Osd
 import qs.modules.session as Session
@@ -24,6 +25,7 @@ Item {
     readonly property alias osd: osd
     readonly property alias osdWrapper: osdWrapper
     readonly property alias notifications: notifications
+    readonly property alias notifCenter: notifCenter
     readonly property alias session: session
     readonly property alias sessionWrapper: sessionWrapper
     readonly property alias launcher: launcher
@@ -69,6 +71,24 @@ Item {
         osdPanel: osdWrapper
         sessionPanel: sessionWrapper
         utilitiesPanel: utilities
+
+        anchors.top: parent.top
+        anchors.right: parent.right
+    }
+
+    NotifCenter.Wrapper {
+        id: notifCenter
+
+        screenState: root.screenState
+        sidebar: sidebar
+        maxHeight: {
+            let height = root.height * 2 / 3;
+            if (root.screenState.osd)
+                height = Math.min(height, osdWrapper.y - Tokens.spacing.large);
+            if (root.screenState.utilities)
+                height = Math.min(height, root.height - utilities.nonAnimHeight - Tokens.spacing.large);
+            return height;
+        }
 
         anchors.top: parent.top
         anchors.right: parent.right

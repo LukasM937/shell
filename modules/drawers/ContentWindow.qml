@@ -223,6 +223,12 @@ StyledWindow {
         }
 
         PanelBg {
+            id: notifCenterBg
+
+            panel: panels.notifCenter
+        }
+
+        PanelBg {
             id: utilsBg
 
             panel: panels.utilities
@@ -287,6 +293,9 @@ StyledWindow {
             }
             notifications.transform: Matrix4x4 {
                 matrix: notifsBg.deformMatrix
+            }
+            notifCenter.transform: Matrix4x4 {
+                matrix: notifCenterBg.deformMatrix
             }
             utilities.transform: Matrix4x4 {
                 matrix: utilsBg.deformMatrix

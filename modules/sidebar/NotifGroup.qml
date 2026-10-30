@@ -38,6 +38,8 @@ StyledRect {
     }
     readonly property bool expanded: props.expandedNotifs.includes(modelData)
 
+    signal closeAllRequested
+
     function toggleExpand(expand: bool): void {
         if (expand) {
             if (!expanded)
@@ -229,6 +231,26 @@ StyledRect {
                                 Anim {}
                             }
                         }
+                    }
+                }
+
+                StyledRect {
+                    implicitWidth: implicitHeight
+                    implicitHeight: groupCount.implicitHeight + Tokens.padding.extraSmall
+
+                    color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3error : Colours.layer(Colours.palette.m3surfaceContainerHigh, 3)
+                    radius: Tokens.rounding.full
+
+                    StateLayer {
+                        color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : Colours.palette.m3onSurface
+                        onClicked: root.closeAllRequested()
+                    }
+
+                    MaterialIcon {
+                        anchors.centerIn: parent
+                        text: "close"
+                        color: root.urgency === NotificationUrgency.Critical ? Colours.palette.m3onError : Colours.palette.m3onSurfaceVariant
+                        fontStyle: Tokens.font.icon.small
                     }
                 }
             }

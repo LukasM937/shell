@@ -31,7 +31,7 @@ Singleton {
     }
 
     function shouldShowPopup(): bool {
-        if (PersistentState.doNotDisturb || ShellState.anySidebarOpen())
+        if (PersistentState.doNotDisturb || ShellState.anySidebarOpen() || ShellState.anyNotifCenterOpen())
             return false;
         if (GlobalConfig.notifs.fullscreen === NotifsFullscreen.Off && hasFullscreen())
             return false;
