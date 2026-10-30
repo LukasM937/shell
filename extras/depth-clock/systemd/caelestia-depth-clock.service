@@ -1,0 +1,7 @@
+[Unit]
+Description=Depth-effect clock: depth cutout and layout for the current wallpaper
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/caelestia/depth-clock/venv/bin/python %h/.local/share/caelestia/depth-clock/generate.py
+Nice=10

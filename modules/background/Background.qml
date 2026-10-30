@@ -34,10 +34,46 @@ Variants {
             component: win
         }
 
+        // Cursor over the desktop drives the depth parallax; springs back when it leaves
+        MouseArea {
+            id: parallaxMouse
+
+            property real px: containsMouse ? mouseX / width * 2 - 1 : 0
+            property real py: containsMouse ? mouseY / height * 2 - 1 : 0
+
+            anchors.fill: parent
+            hoverEnabled: depthClock.parallaxActive
+            acceptedButtons: Qt.NoButton
+
+            Behavior on px {
+                SpringAnimation {
+                    spring: 1.6
+                    damping: 0.35
+                    epsilon: 0.001
+                }
+            }
+
+            Behavior on py {
+                SpringAnimation {
+                    spring: 1.6
+                    damping: 0.35
+                    epsilon: 0.001
+                }
+            }
+        }
+
         Item {
             id: behindClock
 
             anchors.fill: parent
+
+            layer.enabled: depthClock.parallaxActive
+            layer.effect: ParallaxEffect {
+                depthMap: depthClock.depthTexture
+                offset: depthClock.shaderOffset
+                focusDepth: depthClock.parallaxConf.focus ?? 0
+                zoom: depthClock.shaderZoom
+            }
 
             Loader {
                 id: wallpaper
@@ -160,6 +196,12 @@ Variants {
                 absX: clockLoader.x
                 absY: clockLoader.y
             }
+        }
+
+        DepthClock {
+            id: depthClock
+
+            offset: Qt.vector2d(parallaxMouse.px, parallaxMouse.py)
         }
     }
 }
