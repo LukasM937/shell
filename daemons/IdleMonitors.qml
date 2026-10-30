@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import Quickshell.Services.UPower
 import Caelestia.Config
 import Caelestia.Services
+import Caelestia.State
 import qs.services
 import qs.modules.lock
 
@@ -37,6 +38,14 @@ Scope {
             Quickshell.execDetached(action);
     }
 
+    // Whether an action would stop work running in the background: sleeping, powering off, rebooting or logging out
+    function stopsWork(action: var): bool {
+        if (!action)
+            return false;
+        // Lists join with commas, which the split removes along with the spaces and brackets
+        return String(action).split(/[^\w-]+/).some(w => ["suspend", "suspendthenhibernate", "hibernate", "hybridsleep", "poweroff", "reboot", "logout", "terminateuser"].includes(w.replace(/[-_]/g, "").toLowerCase()));
+    }
+
     Connections {
         function onAboutToSleep(): void {
             if (GlobalConfig.general.idle.lockBeforeSleep)
@@ -66,6 +75,10 @@ Scope {
                 if (modelData.inhibitWhenAudio && root.hasPlayer)
                     return false;
                 if (modelData.inhibitWhenCharging && root.isCharging)
+                    return false;
+                // Keep awake works through a Wayland idle inhibitor, which the compositor ignores once the lock
+                // screen hides its surface, so the timeouts that would stop work are held back here as well
+                if (RuntimeState.inhibitIdle && (modelData.respectInhibitors ?? true) && root.stopsWork(modelData.idleAction))
                     return false;
                 return true;
             }
