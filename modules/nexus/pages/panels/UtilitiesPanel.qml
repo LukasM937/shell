@@ -73,11 +73,18 @@ PageBase {
         }
 
         ToggleRow {
-            last: true
             text: Tr.tr("Quick toggles")
             subtext: Tr.tr("Show the quick toggles card")
             checked: Config.utilities.cards.quickToggles
             onToggled: GlobalConfig.utilities.cards.quickToggles = checked
+        }
+
+        ToggleRow {
+            last: true
+            text: Tr.tr("AirPods")
+            subtext: Tr.tr("Show battery and noise control while LibrePods is running")
+            checked: Config.utilities.cards.airPods
+            onToggled: GlobalConfig.utilities.cards.airPods = checked
         }
 
         // Quick toggles
