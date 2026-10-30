@@ -49,7 +49,7 @@ Item {
 
             PropertyChanges {
                 root.implicitWidth: Math.max(root.Tokens.sizes.launcher.itemWidth * 1.2, wallpaperList.implicitWidth)
-                root.implicitHeight: root.Tokens.sizes.launcher.wallpaperHeight
+                root.implicitHeight: root.Tokens.sizes.launcher.wallpaperHeight + (wallpaperList.item?.headerHeight ?? 0)
                 wallpaperList.active: true
             }
         }
@@ -123,7 +123,13 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
 
         MaterialIcon {
-            text: root.state === "wallpapers" ? "wallpaper_slideshow" : "manage_search"
+            text: {
+                if (root.state !== "wallpapers")
+                    return "manage_search";
+                if (!WallpaperDiscover.online)
+                    return "wallpaper_slideshow";
+                return WallpaperDiscover.searching ? "travel_explore" : WallpaperDiscover.error ? "cloud_off" : "image_search";
+            }
             color: Colours.palette.m3onSurfaceVariant
             fontStyle: Tokens.font.icon.extraLarge
 
@@ -134,13 +140,34 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
 
             StyledText {
-                text: root.state === "wallpapers" ? Tr.tr("No wallpapers found") : Tr.tr("No results")
+                text: {
+                    if (root.state !== "wallpapers")
+                        return Tr.tr("No results");
+                    if (WallpaperDiscover.online && WallpaperDiscover.searching)
+                        return Tr.tr("Searching...");
+                    if (WallpaperDiscover.online && WallpaperDiscover.error)
+                        return Tr.tr("Couldn't search for wallpapers");
+                    return Tr.tr("No wallpapers found");
+                }
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.builders.large.weight(Font.Medium).build()
             }
 
             StyledText {
-                text: root.state === "wallpapers" && Wallpapers.list.length === 0 ? Tr.tr("Try putting some wallpapers in %1").arg(Paths.shortenHome(Paths.wallsdir)) : Tr.tr("Try searching for something else")
+                text: {
+                    if (root.state === "wallpapers" && WallpaperDiscover.online) {
+                        if (WallpaperDiscover.searching)
+                            return Tr.tr("Only safe-for-work wallpapers are shown");
+                        if (WallpaperDiscover.error)
+                            return WallpaperDiscover.error;
+                        if (WallpaperDiscover.classifier === "broken")
+                            return Tr.tr("The content check can't run, so nothing is shown");
+                        return Tr.tr("Try another search or colour");
+                    }
+                    if (root.state === "wallpapers" && Wallpapers.list.length === 0)
+                        return Tr.tr("Try putting some wallpapers in %1").arg(Paths.shortenHome(Paths.wallsdir));
+                    return Tr.tr("Try searching for something else");
+                }
                 color: Colours.palette.m3onSurfaceVariant
                 font: Tokens.font.body.medium
             }
