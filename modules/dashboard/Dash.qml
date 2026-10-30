@@ -20,7 +20,7 @@ GridLayout {
         Layout.preferredWidth: Tokens.sizes.dashboard.userWidth
         Layout.fillHeight: true
 
-        radius: Tokens.rounding.extraLarge
+        radius: Tokens.rounding.medium
 
         User {
             id: user
@@ -36,7 +36,7 @@ GridLayout {
         Layout.preferredWidth: Tokens.sizes.dashboard.weatherWidth
         Layout.preferredHeight: weather.implicitHeight
 
-        radius: Tokens.rounding.extraLarge * 1.5
+        radius: Tokens.rounding.medium
 
         SmallWeather {
             id: weather
@@ -48,7 +48,7 @@ GridLayout {
         Layout.preferredWidth: dateTime.implicitWidth
         Layout.fillHeight: true
 
-        radius: Tokens.rounding.large
+        radius: Tokens.rounding.medium
 
         DateTime {
             id: dateTime
@@ -62,7 +62,7 @@ GridLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: calendar.implicitHeight
 
-        radius: Tokens.rounding.extraLarge
+        radius: Tokens.rounding.medium
 
         Calendar {
             id: calendar
@@ -77,7 +77,7 @@ GridLayout {
         Layout.preferredWidth: resources.implicitWidth
         Layout.fillHeight: true
 
-        radius: Tokens.rounding.large
+        radius: Tokens.rounding.medium
 
         Resources {
             id: resources
@@ -91,7 +91,7 @@ GridLayout {
         Layout.preferredWidth: media.implicitWidth
         Layout.fillHeight: true
 
-        radius: Tokens.rounding.extraLarge * 2
+        radius: Tokens.rounding.medium
 
         Media {
             id: media

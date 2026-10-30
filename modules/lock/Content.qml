@@ -48,7 +48,6 @@ RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            bottomRightRadius: Tokens.rounding.extraLarge
             radius: Tokens.rounding.medium
             color: Colours.tPalette.m3surfaceContainer
 

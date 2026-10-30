@@ -19,7 +19,7 @@ StyledRect {
     required property real temperature
 
     color: Colours.tPalette.m3surfaceContainer
-    radius: Tokens.rounding.extraLarge
+    radius: Tokens.rounding.medium
 
     implicitWidth: Tokens.sizes.dashboard.perfHeroCardWidth
     implicitHeight: Math.max(tempProg.implicitHeight + detailsRow.implicitHeight + Tokens.spacing.large, usageShape.implicitHeight + usageLabel.implicitHeight) + Tokens.padding.large * 2

@@ -74,7 +74,7 @@ Item {
         anchors.bottom: parent.bottom
         anchors.margins: Tokens.padding.large
 
-        radius: Tokens.rounding.large
+        radius: Tokens.rounding.medium
         color: "transparent"
 
         Flickable {

@@ -49,7 +49,7 @@ StyledRect {
     implicitHeight: content.implicitHeight + Tokens.padding.medium * 2
 
     clip: true
-    radius: Tokens.rounding.large
+    radius: Tokens.rounding.medium
     color: root.urgency === "critical" ? Colours.palette.m3secondaryContainer : Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
 
     RowLayout {
