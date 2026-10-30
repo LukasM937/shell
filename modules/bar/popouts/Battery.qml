@@ -6,6 +6,7 @@ import Caelestia.Config
 import Caelestia.I18n
 import qs.components
 import qs.services
+import qs.modules.utilities.cards
 
 Column {
     id: root
@@ -26,19 +27,6 @@ Column {
         return comps.join(Tr.trCtx(", ", "duration component separator"));
     }
 
-    function powerProfileToString(p: int): string {
-        switch (p) {
-        case PowerProfile.Balanced:
-            return Tr.trCtx("Balanced", "power profile");
-        case PowerProfile.Performance:
-            return Tr.trCtx("Performance", "power profile");
-        case PowerProfile.PowerSaver:
-            return Tr.trCtx("Power saver", "power profile");
-        default:
-            return Tr.trCtx("Unknown", "power profile");
-        }
-    }
-
     function perfDegradationToString(p: int): string {
         switch (p) {
         case PerformanceDegradationReason.HighTemperature:
@@ -51,18 +39,23 @@ Column {
     }
 
     spacing: Tokens.spacing.medium
-    width: Tokens.sizes.bar.batteryWidth
+    width: UPower.displayDevice.isLaptopBattery ? Tokens.sizes.bar.batteryWidth : Tokens.sizes.bar.networkWidth
 
-    StyledText {
-        text: UPower.displayDevice.isLaptopBattery ? Tr.trCtx("Remaining: %1%", "battery remaining").arg(Math.round(UPower.displayDevice.percentage * 100)) : Tr.tr("No battery detected")
+    // Desktops have no battery and power profiles matter little there, so offer keep awake instead
+    IdleInhibit {
+        visible: !UPower.displayDevice.isLaptopBattery
+        width: parent.width
     }
 
     StyledText {
+        visible: UPower.displayDevice.isLaptopBattery
+        text: Tr.trCtx("Remaining: %1%", "battery remaining").arg(Math.round(UPower.displayDevice.percentage * 100))
+    }
+
+    StyledText {
+        visible: UPower.displayDevice.isLaptopBattery
         text: {
             const dev = UPower.displayDevice;
-            if (!dev.isLaptopBattery)
-                return Tr.tr("Power profile: %1").arg(root.powerProfileToString(PowerProfiles.profile));
-
             if (UPower.onBattery) {
                 const time = root.formatSeconds(dev.timeToEmpty);
                 if (time)
@@ -149,6 +142,7 @@ Column {
             return balance.icon;
         }
 
+        visible: UPower.displayDevice.isLaptopBattery
         anchors.horizontalCenter: parent.horizontalCenter
 
         implicitWidth: saver.implicitHeight + balance.implicitHeight + perf.implicitHeight + Tokens.padding.medium * 2 + Tokens.spacing.largeIncreased * 2

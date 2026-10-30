@@ -18,6 +18,7 @@ ColumnLayout {
     required property BarPopouts.Wrapper popouts
     required property bool fullscreen
     readonly property int vPadding: Tokens.padding.large
+    property string clickedPopout // Stays open while moving over the bar towards it, unlike hover popouts
 
     function closeTray(): void {
         if (!Config.bar.tray.compact)
@@ -37,7 +38,8 @@ ColumnLayout {
             closeTray();
 
         if (!ch) {
-            popouts.hasCurrent = false;
+            if (popouts.currentName !== clickedPopout)
+                popouts.hasCurrent = false;
             return;
         }
 
@@ -73,6 +75,19 @@ ColumnLayout {
             popouts.currentCenter = (ch.item as Item).mapToItem(root, 0, (ch.item as Item).implicitHeight / 2).y ?? 0;
             popouts.hasCurrent = true;
         }
+    }
+
+    // For popouts opened by clicking instead of hovering
+    function togglePopout(name: string, item: Item): void {
+        if (popouts.hasCurrent && popouts.currentName === name) {
+            popouts.hasCurrent = false;
+            return;
+        }
+
+        clickedPopout = name;
+        popouts.currentName = name;
+        popouts.currentCenter = Qt.binding(() => item.mapToItem(root, 0, item.implicitHeight / 2).y);
+        popouts.hasCurrent = true;
     }
 
     function handleWheel(y: real, angleDelta: point): void {
@@ -123,7 +138,10 @@ ColumnLayout {
                 roleValue: "logo"
                 delegate: EntryWrapper {
                     OsIcon {
+                        id: osIcon
+
                         objectName: "taskbarLogo"
+                        onClicked: root.togglePopout("system", osIcon)
                     }
                 }
             }
