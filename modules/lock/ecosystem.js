@@ -2,8 +2,8 @@
 
 // Simulation of the lock screen ecosystem screensaver: a grid of land and water that grows, burns, wears down and
 // recovers. It has no QML dependencies so scripts/ecosystem-check.js can run it headless. The rules and constants are
-// those of docs/superpowers/specs/2026-11-07-screensaver-ecosystem-prototype.html, except the worms and the berry
-// growth, which are new; do not tune anything here without running the check. All randomness goes through world.rng so a seeded generator gives a repeatable world.
+// those of docs/superpowers/specs/2026-11-07-screensaver-ecosystem-prototype.html, except the worms, the berry
+// growth and the treefall, which are new; do not tune anything here without running the check. All randomness goes through world.rng so a seeded generator gives a repeatable world.
 
 var T = {
     DEEP: 0,
@@ -38,6 +38,10 @@ var RESPAWN_AFTER = 300; // steps a species stays extinct before a few members a
 var BERRY_BITE = 0.03; // most berries a bird takes from one cell and step
 var WORM_BITE = 0.03; // and most worms, on top of the berries
 var BITE_GAIN = 1.2;
+// New, not from the prototype: a forest cell falls to a clearing of young grass at this chance per step. Without it the
+// forest outgrows the grass whenever the herds are thin and the land is nearly all forest within the hour; the check
+// holds forest under 85% and grass over 8% for an hour at the default signals.
+var TREEFALL = 0.0003;
 
 // Where each species may stand. Water is 0 and 1, land 2 to 6 (fire, 7, is not), air is anywhere on the map.
 var KINDS = {
@@ -470,6 +474,12 @@ function cells(w, rain) {
                     }
                 }
             } else if (t === T.FOREST) {
+                if (F.spread && rng() < TREEFALL) {
+                    type[p] = T.GRASS;
+                    bio[p] = 0.3;
+                    age[p] = 0;
+                    continue;
+                }
                 age[p]++;
                 bio[p] = Math.min(1, bio[p] + BERRY_GROWTH * rain * (0.4 + fert[p]));
                 worm[p] = Math.min(1, worm[p] + WORM_GROWTH * rain * (0.2 + moist[p]) * (0.4 + fert[p]));

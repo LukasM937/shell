@@ -36,9 +36,11 @@ function mulberry32(a) {
 }
 
 let failures = 0;
+let ran = 0;
 function check(name, fn) {
     if (args.only && !name.includes(args.only))
         return;
+    ran++;
     try {
         const info = fn();
         console.log(`PASS ${name}${info ? ` (${info})` : ""}`);
@@ -423,8 +425,10 @@ check("berries regrow", () => {
 });
 
 check("worms regrow after desert recovers", () => {
+    // No lightning: a fire takes the worms with it (worms live only in living soil), and a land with no herds grows lush
+    // enough for one to sweep most of it, so whether this passed came down to when the last fire was
     const w = landOnly(make());
-    E.setSignals(w, { rain: 0.8 });
+    E.setSignals(w, { rain: 0.8, lightning: 0 });
     const wasted = [];
     for (let p = 0; p < w.type.length; p++)
         if (w.type[p] === T.GRASS && w.moist[p] > 0.5) {
@@ -639,7 +643,34 @@ check("guano grows the coast", () => {
     }
 });
 
-check("a time jump does not replay", () => {
+check("at default signals no biome takes over", () => {
+    // An hour at 1x, the spec's mark for a world that has gone flat. The first samples are left out as the land
+    // settles from its generated start
+    const out = [];
+    for (const springs of [0, 3])
+        for (const seed of [11, 12, 13]) {
+            const w = make({ seed });
+            E.setSignals(w, { rain: 0.8, lightning: 0.05, springs });
+            const forest = [];
+            for (let i = 1; i <= 54000; i++) {
+                E.step(w);
+                if (i % 6000 !== 0 || i <= 12000)
+                    continue;
+                const c = E.census(w);
+                const at = `seed ${seed}, springs ${springs}, step ${i}`;
+                assert(c.forest <= 0.85, `${at}: forest is ${(c.forest * 100).toFixed(1)}% of the land`);
+                assert(c.grass >= 0.08, `${at}: grass is ${(c.grass * 100).toFixed(1)}% of the land`);
+                forest.push(c.forest);
+            }
+            const mean = forest.reduce((a, b) => a + b, 0) / forest.length;
+            assert(mean < 0.75, `seed ${seed}, springs ${springs}: forest averages ${(mean * 100).toFixed(1)}% of the land`);
+            out.push(`${seed}/${springs} ${(mean * 100).toFixed(0)}%`);
+        }
+    return `mean forest ${out.join(", ")}`;
+});
+
+// That a clock jump does not replay the missed steps is EcoWorld.tick()'s doing: it runs a fixed few steps a tick
+check("a step advances the tick by exactly one", () => {
     const w = make();
     const before = w.tick;
     E.step(w);
@@ -840,4 +871,9 @@ check("signals: pruneWorlds", () => {
         assert(Object.keys(S.pruneWorlds(bad)).length === 0, `pruneWorlds(${bad}) is not empty`);
 });
 
+// A mistyped --only would otherwise run nothing and look like a pass
+if (!ran) {
+    console.log(`FAIL no check matches --only ${args.only}`);
+    process.exit(1);
+}
 process.exit(failures ? 1 : 0);

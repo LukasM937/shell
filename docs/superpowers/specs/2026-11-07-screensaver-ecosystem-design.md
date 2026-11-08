@@ -121,7 +121,7 @@ logged.
 ### Land rules (all from the prototype, all individually switchable there)
 
 Overgrazing turns bare grass to desert (after about 60 steps bare) and lowers fertility. Unattended grass spreads onto sand
-and grows into forest. Rested desert near water recovers. Sheep in forest thin it. Dung raises fertility and seeds bare
+and grows into forest. Rested desert near water recovers. Sheep in forest thin it, and old trees fall and leave a clearing of young grass (new, so the land does not end as one forest). Dung raises fertility and seeds bare
 neighbours. Erosion wears bare desert down. Water level follows rain, so lakes shrink in drought and shores flood in
 rain. Lightning ignites forest and lush grass; fire burns, leaves ash, then regrows. Sheep inherit hardiness and the
 herd adapts to desert. Trees bear berries, which regrow with rain and fertility. Worms live in grass and forest soil, regrow with moisture and fertility, and are gone when the soil turns to desert or burns; they return when grass does. Mercy rains start when desert passes 55% and end under 40%, so the world cannot stay a desert.
