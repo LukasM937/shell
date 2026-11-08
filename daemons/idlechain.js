@@ -4,6 +4,12 @@
 // scripts/idlechain-check.js can run it headless; the daemon calls update() once a second and carries out the actions.
 // Times are milliseconds, the settings are minutes.
 //
+// What the daemon has to do for this to work:
+// - After a "lock" action it passes locked: true on the next update, or the chain reads it as an external unlock.
+// - "sleep" is sent once per entry into displayOff while no task is busy; a failed or cancelled suspend is not retried
+//   until the next entry.
+// - An unlock from outside while the screensaver is up or the display is off returns ["wake"].
+//
 // y and z count from the previous stage, not from the last input, so a manual lock still gets its full screensaver delay.
 // The stages from "locked" onward run whenever the session is locked, whatever lockAfter says: 0 only turns off the
 // automatic lock.
@@ -58,8 +64,13 @@ function update(chain, now, input) {
         return dark ? ["wake"] : actions;
     }
 
-    // Counts as activity, so nothing runs out while paused and the full delay starts again afterwards
+    // Counts as activity, so nothing runs out while paused and the full delay starts again afterwards. Real input still
+    // gets through: an inhibitor that shows up while the screensaver is up must not take the lock UI away from the user.
     if (input.paused) {
+        if (input.activity && (chain.stage === "screensaver" || chain.stage === "displayOff")) {
+            enter(chain, "locked", now);
+            return ["wake"];
+        }
         chain.lastActivity = now;
         chain.stageSince = now;
         return actions;

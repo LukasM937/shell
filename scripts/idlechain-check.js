@@ -184,6 +184,24 @@ check("paused holds a running screensaver", () => {
     assert.deepStrictEqual(s.jump(SEC), ["displayOff"]);
 });
 
+check("input while paused still wakes", () => {
+    const s = session();
+    s.run(721 * SEC);
+    assert.strictEqual(s.chain.stage, "screensaver");
+    s.run(s.now + 60 * SEC, { paused: true });
+    assert.strictEqual(s.chain.stage, "screensaver", "a pause alone does not wake");
+    assert.deepStrictEqual(s.jump(SEC, { paused: true, activity: true }), ["wake"]);
+    assert.strictEqual(s.chain.stage, "locked");
+    assert.deepStrictEqual(s.jump(SEC, { paused: true }), [], "still frozen");
+
+    const d = session();
+    d.run((720 + 3600 + 1) * SEC);
+    assert.strictEqual(d.chain.stage, "displayOff");
+    assert.deepStrictEqual(d.jump(SEC, { paused: true }), [], "no sleep while paused");
+    assert.deepStrictEqual(d.jump(SEC, { paused: true, activity: true }), ["wake"]);
+    assert.strictEqual(d.chain.stage, "locked");
+});
+
 check("a time jump gives one stage", () => {
     const s = session();
     assert.deepStrictEqual(s.jump(8 * 3600 * SEC), ["lock"]);
