@@ -42,22 +42,13 @@ class GeneralIdle : public settings::ObjectNode {
     CONFIG_PROPERTY(bool, lockBeforeSleep, true)
     CONFIG_PROPERTY(bool, inhibitWhenAudio, true)
     CONFIG_PROPERTY(bool, inhibitWhenCharging, false)
-    CONFIG_LIST(GeneralIdleTimeoutList, timeouts,
-        DEFAULT_ARG({
-            vmap({
-                { u"timeout"_s, 180 },
-                { u"idleAction"_s, u"lock"_s },
-            }),
-            vmap({
-                { u"timeout"_s, 300 },
-                { u"idleAction"_s, u"dpms off"_s },
-                { u"returnAction"_s, u"dpms on"_s },
-            }),
-            vmap({
-                { u"timeout"_s, 600 },
-                { u"idleAction"_s, QStringList{ u"suspendThenHibernate"_s } },
-            }),
-        }))
+    CONFIG_PROPERTY(int, lockAfter, 10)
+    CONFIG_PROPERTY(int, screensaverAfter, 2)
+    CONFIG_PROPERTY(int, displayOffAfter, 60)
+    CONFIG_PROPERTY(bool, sleepWhenDisplayOff, true)
+    CONFIG_PROPERTY(int, busyCpuPercent, 25)
+    CONFIG_PROPERTY(int, busyNetworkKBs, 500)
+    CONFIG_LIST(GeneralIdleTimeoutList, timeouts, {})
 };
 
 class GeneralBatteryWarnLevel : public settings::ObjectNode {

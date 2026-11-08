@@ -439,24 +439,13 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
             "lockBeforeSleep": true,
             "inhibitWhenAudio": true,
             "inhibitWhenCharging": false,
-            "timeouts": [
-                {
-                    "timeout": 180,
-                    "idleAction": "lock",
-                    "inhibitWhenAudio": false,
-                    "inhibitWhenCharging": false,
-                    "respectInhibitors": true
-                },
-                {
-                    "timeout": 300,
-                    "idleAction": "dpms off",
-                    "returnAction": "dpms on"
-                },
-                {
-                    "timeout": 600,
-                    "idleAction": ["suspendThenHibernate"]
-                }
-            ]
+            "lockAfter": 10,
+            "screensaverAfter": 2,
+            "displayOffAfter": 60,
+            "sleepWhenDisplayOff": true,
+            "busyCpuPercent": 25,
+            "busyNetworkKBs": 500,
+            "timeouts": []
         },
         "battery": {
             "warnLevels": [
@@ -818,7 +807,18 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
         "maxHowdyTries": 3,
         "triggerHowdyOnWake": true,
         "hideNotifs": false,
-        "enableSessionControls": true
+        "enableSessionControls": true,
+        "screensaver": {
+            "enabled": true,
+            "speed": 1,
+            "eventLog": true,
+            "wifi": true,
+            "bluetooth": true,
+            "ping": true,
+            "pingHost": "1.1.1.1",
+            "neighbours": false,
+            "heat": true
+        }
     },
     "nexus": {
         "wallpapersPerRow": 4,
