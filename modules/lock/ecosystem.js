@@ -2,8 +2,8 @@
 
 // Simulation of the lock screen ecosystem screensaver: a grid of land and water that grows, burns, wears down and
 // recovers. It has no QML dependencies so scripts/ecosystem-check.js can run it headless. The rules and constants are
-// those of docs/superpowers/specs/2026-11-07-screensaver-ecosystem-prototype.html; do not tune them here without
-// running the check. All randomness goes through world.rng so a seeded generator gives a repeatable world.
+// those of docs/superpowers/specs/2026-11-07-screensaver-ecosystem-prototype.html, except the worms and the berry
+// growth, which are new; do not tune anything here without running the check. All randomness goes through world.rng so a seeded generator gives a repeatable world.
 
 var T = {
     DEEP: 0,
@@ -26,15 +26,17 @@ var SPRING_RANGE = 7; // cells a spring wets around itself
 var WATER_RANGE = 14; // cells from the nearest water at which the land is dry
 var MAX_LIGHTNING = 0.55;
 var LIFT_STEP = 0.0002; // per step, so a 0.3 island takes 1500 steps, 100 s at 1x
-// Berries and worms are far slower than the grass: with anything faster the birds sit at their cap whatever the rain
-// does, and the hawks cannot hold them back
-var WORM_GROWTH = 0.00005;
-var BERRY_GROWTH = 0.00015;
+// New, not from the prototype (its fruit grew at 0.0007): berries and worms are far slower than the grass. With anything
+// faster the birds sit at their cap whatever the rain does and the hawks cannot hold them back. The check holds the
+// birds under half the steps at their cap at rain 0.8 and worms at a fifth or more of what they eat.
+var WORM_GROWTH = 0.00004;
+var BERRY_GROWTH = 0.0001;
 var MAX_EVENTS = 100;
 var MIN_WATER = 0.1;
 var MIN_LAND = 0.15;
 var RESPAWN_AFTER = 300; // steps a species stays extinct before a few members arrive again
-var BERRY_BITE = 0.03; // most a bird takes from one cell and step, berries first then worms
+var BERRY_BITE = 0.03; // most berries a bird takes from one cell and step
+var WORM_BITE = 0.03; // and most worms, on top of the berries
 var BITE_GAIN = 1.2;
 
 // Where each species may stand. Water is 0 and 1, land 2 to 6 (fire, 7, is not), air is anywhere on the map.
@@ -281,6 +283,11 @@ function create(opts) {
         count: new Int32Array(8),
         animals: {},
         // steps each species has been extinct, and whether its extinction was reported
+        // what the birds have eaten so far, in bio and worm units
+        eaten: {
+            berries: 0,
+            worms: 0
+        },
         ext: {},
         gone: {},
         springs: [],
@@ -844,10 +851,12 @@ function animals(w) {
         if (t2 === T.FOREST) {
             got = Math.min(bio[p2], BERRY_BITE);
             bio[p2] -= got;
+            w.eaten.berries += got;
         }
         if (t2 === T.GRASS || t2 === T.FOREST) {
-            var wormBite = Math.min(worm[p2], BERRY_BITE - got);
+            var wormBite = Math.min(worm[p2], WORM_BITE);
             worm[p2] -= wormBite;
+            w.eaten.worms += wormBite;
             got += wormBite;
         }
         bi.e += got * BITE_GAIN;

@@ -193,6 +193,26 @@ check("values stay valid", () => {
     return notes.join(", ");
 });
 
+check("birds live on berries and worms", () => {
+    // Food sets the birds, not the cap: in three worlds they must leave it half the time at rain 0.8, and the worms
+    // under the soil must be a real part of the diet
+    const notes = [];
+    for (const seed of [1, 2, 3]) {
+        const w = make({ seed });
+        E.setSignals(w, { rain: 0.8 });
+        let capped = 0;
+        for (let i = 0; i < 20000; i++) {
+            E.step(w);
+            capped += w.animals.bird.length >= CAPS.bird;
+        }
+        const share = w.eaten.worms / (w.eaten.worms + w.eaten.berries);
+        assert(capped / 20000 < 0.5, `seed ${seed}: the birds sat at their cap in ${((capped / 20000) * 100).toFixed(0)}% of the steps`);
+        assert(share >= 0.2, `seed ${seed}: worms were ${(share * 100).toFixed(0)}% of what the birds ate`);
+        notes.push(`seed ${seed}: cap ${((capped / 20000) * 100).toFixed(0)}%, worms ${(share * 100).toFixed(0)}%`);
+    }
+    return notes.join(", ");
+});
+
 check("worms live only in living soil", () => {
     const w = landOnly(make());
     E.setSignals(w, { rain: 0.8 });
@@ -409,11 +429,11 @@ check("worms regrow after desert recovers", () => {
     E.step(w);
     assert(wasted.every(p => w.type[p] !== T.DESERT || w.worm[p] === 0), "worms survived in desert");
     // Worms are slow on purpose, so the soil needs a few thousand steps after it turns to grass
-    run(w, 6000);
+    run(w, 10000);
     const back = wasted.filter(p => living(w.type[p]));
     assert(back.length > 0, "no desert recovered");
     const mean = back.reduce((sum, p) => sum + w.worm[p], 0) / back.length;
-    assert(mean > 0.05, `mean worm ${mean.toFixed(3)} on ${back.length} recovered cells`);
+    assert(mean > 0.1, `mean worm ${mean.toFixed(3)} on ${back.length} recovered cells`);
     return `${back.length} of ${wasted.length} cells back, mean worm ${mean.toFixed(2)}`;
 });
 
