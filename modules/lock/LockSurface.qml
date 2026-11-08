@@ -8,6 +8,7 @@ import Caelestia.Multimedia
 import Caelestia.State
 import qs.components
 import qs.services
+import qs.modules.lock
 
 WlSessionLockSurface {
     id: root
@@ -16,6 +17,8 @@ WlSessionLockSurface {
     required property Pam pam
 
     readonly property alias unlocking: unlockAnim.running
+    // The unlock animation plays on the lock content, so the ecosystem steps aside for it
+    readonly property bool saver: lock.screensaverActive && !unlocking
     property RunnerGame runnerGame
 
     contentItem.Config.screen: screen.name
@@ -195,55 +198,83 @@ WlSessionLockSurface {
         }
     }
 
+    // Fades the lock content out for the screensaver; unlockAnim and initAnim animate lockContent's own opacity
     Item {
-        id: lockContent
+        id: lockLayer
 
-        readonly property int size: lockIcon.implicitHeight + Tokens.padding.large * 4
-        readonly property int radius: size / 4 * Tokens.rounding.scale
+        anchors.fill: parent
+        opacity: root.saver ? 0 : 1
 
-        anchors.centerIn: parent
-        implicitWidth: size
-        implicitHeight: size
-
-        visible: Config.lock.enabled
-        rotation: 180
-        scale: 0
-
-        StyledRect {
-            id: lockBg
-
-            anchors.fill: parent
-            color: Colours.palette.m3surface
-            radius: parent.radius
-            opacity: Colours.transparency.enabled ? Colours.transparency.base : 1
-
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                shadowEnabled: true
-                blurMax: 15
-                shadowColor: Qt.alpha(Colours.palette.m3shadow, 0.7)
+        Behavior on opacity {
+            Anim {
+                type: Anim.StandardSmall
             }
         }
 
-        MaterialIcon {
-            id: lockIcon
+        Item {
+            id: lockContent
+
+            readonly property int size: lockIcon.implicitHeight + Tokens.padding.large * 4
+            readonly property int radius: size / 4 * Tokens.rounding.scale
 
             anchors.centerIn: parent
-            text: "lock"
-            fontStyle: Tokens.font.icon.builders.extraLarge.scale(4).weight(Font.Bold).build()
+            implicitWidth: size
+            implicitHeight: size
+
+            visible: Config.lock.enabled
             rotation: 180
-        }
-
-        Content {
-            id: content
-
-            anchors.centerIn: parent
-            width: (root.screen?.height ?? 0) * Tokens.sizes.lock.heightMult * Tokens.sizes.lock.ratio - Tokens.padding.extraLargeIncreased
-            height: (root.screen?.height ?? 0) * Tokens.sizes.lock.heightMult - Tokens.padding.extraLargeIncreased
-
-            lock: root
-            opacity: 0
             scale: 0
+
+            StyledRect {
+                id: lockBg
+
+                anchors.fill: parent
+                color: Colours.palette.m3surface
+                radius: parent.radius
+                opacity: Colours.transparency.enabled ? Colours.transparency.base : 1
+
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    blurMax: 15
+                    shadowColor: Qt.alpha(Colours.palette.m3shadow, 0.7)
+                }
+            }
+
+            MaterialIcon {
+                id: lockIcon
+
+                anchors.centerIn: parent
+                text: "lock"
+                fontStyle: Tokens.font.icon.builders.extraLarge.scale(4).weight(Font.Bold).build()
+                rotation: 180
+            }
+
+            Content {
+                id: content
+
+                anchors.centerIn: parent
+                width: (root.screen?.height ?? 0) * Tokens.sizes.lock.heightMult * Tokens.sizes.lock.ratio - Tokens.padding.extraLargeIncreased
+                height: (root.screen?.height ?? 0) * Tokens.sizes.lock.heightMult - Tokens.padding.extraLargeIncreased
+
+                lock: root
+                opacity: 0
+                scale: 0
+            }
+        }
+    }
+
+    Screensaver {
+        anchors.fill: parent
+        eco: EcoWorld
+        focus: false
+        visible: opacity > 0
+        opacity: root.saver ? 1 : 0
+
+        Behavior on opacity {
+            Anim {
+                type: Anim.StandardSmall
+            }
         }
     }
 }
