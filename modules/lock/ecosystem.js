@@ -4,7 +4,6 @@
 // recovers. It has no QML dependencies so scripts/ecosystem-check.js can run it headless. The rules and constants are
 // those of docs/superpowers/specs/2026-11-07-screensaver-ecosystem-prototype.html; do not tune them here without
 // running the check. All randomness goes through world.rng so a seeded generator gives a repeatable world.
-// This file holds the terrain and land rules. The animals come in a later change, so the animal lists stay empty.
 
 var T = {
     DEEP: 0,
@@ -27,10 +26,78 @@ var SPRING_RANGE = 7; // cells a spring wets around itself
 var WATER_RANGE = 14; // cells from the nearest water at which the land is dry
 var MAX_LIGHTNING = 0.55;
 var LIFT_STEP = 0.0002; // per step, so a 0.3 island takes 1500 steps, 100 s at 1x
-var WORM_GROWTH = 0.003; // a little faster than berries, worms come back when grass does
+// Berries and worms are far slower than the grass: with anything faster the birds sit at their cap whatever the rain
+// does, and the hawks cannot hold them back
+var WORM_GROWTH = 0.00005;
+var BERRY_GROWTH = 0.00015;
 var MAX_EVENTS = 100;
 var MIN_WATER = 0.1;
 var MIN_LAND = 0.15;
+var RESPAWN_AFTER = 300; // steps a species stays extinct before a few members arrive again
+var BERRY_BITE = 0.03; // most a bird takes from one cell and step, berries first then worms
+var BITE_GAIN = 1.2;
+
+// Where each species may stand. Water is 0 and 1, land 2 to 6 (fire, 7, is not), air is anywhere on the map.
+var KINDS = {
+    sheep: {
+        ok: function (t) {
+            return t >= 1 && t <= 6;
+        },
+        speed: 0.14,
+        cap: 200,
+        start: 24,
+        arrive: 6
+    },
+    fish: {
+        ok: function (t) {
+            return t === 0 || t === 1;
+        },
+        speed: 0.3,
+        cap: 160,
+        start: 40,
+        arrive: 12
+    },
+    bird: {
+        ok: function (t) {
+            return t >= 0;
+        },
+        speed: 0.34,
+        cap: 100,
+        start: 18,
+        arrive: 8
+    },
+    shark: {
+        ok: function (t) {
+            return t === 0 || t === 1;
+        },
+        speed: 0.38,
+        cap: 4,
+        start: 2,
+        arrive: 1
+    },
+    wolf: {
+        ok: function (t) {
+            return t >= 2 && t <= 6;
+        },
+        speed: 0.26,
+        cap: 4,
+        start: 3,
+        arrive: 1
+    },
+    hawk: {
+        ok: function (t) {
+            return t >= 0;
+        },
+        speed: 0.44,
+        cap: 4,
+        start: 2,
+        arrive: 1
+    }
+};
+
+var DIRS = [];
+for (var di = 0; di < 8; di++)
+    DIRS.push([Math.cos(di * Math.PI / 4), Math.sin(di * Math.PI / 4)]);
 
 function nearOffsets() {
     var out = [];
@@ -108,14 +175,17 @@ function countTypes(w) {
     return w.type.length - w.count[T.DEEP] - w.count[T.SHALLOW];
 }
 
-function emit(w, id, cooldown) {
+function emit(w, id, cooldown, species) {
     if ((w.cool[id] || 0) > w.tick)
         return;
     w.cool[id] = w.tick + cooldown;
-    w.events.push({
+    var event = {
         tick: w.tick,
         id: id
-    });
+    };
+    if (species)
+        event.species = species;
+    w.events.push(event);
     if (w.events.length > MAX_EVENTS)
         w.events.shift();
 }
@@ -167,6 +237,7 @@ function generate(w, saved, bumps) {
             w.bio[p] = 0.7;
             w.fert[p] = saved ? saved.fert[p] : 0.6 + 0.4 * vn(i * 0.2, j * 0.2, seed + 2);
             w.worm[p] = t === T.GRASS || t === T.FOREST ? 0.6 : 0;
+            w.plank[p] = 0.7;
             w.age[p] = w.rest[p] = w.stress[p] = w.burn[p] = 0;
         }
 }
@@ -199,6 +270,8 @@ function create(opts) {
         bio: new Float32Array(n),
         fert: new Float32Array(n),
         worm: new Float32Array(n),
+        // plankton, what the fish eat; only water cells use it
+        plank: new Float32Array(n),
         age: new Int32Array(n),
         rest: new Int32Array(n),
         stress: new Int32Array(n),
@@ -207,6 +280,9 @@ function create(opts) {
         moist: new Float32Array(n),
         count: new Int32Array(8),
         animals: {},
+        // steps each species has been extinct, and whether its extinction was reported
+        ext: {},
+        gone: {},
         springs: [],
         candidates: [],
         events: [],
@@ -217,8 +293,11 @@ function create(opts) {
         islandKey: "[]",
         groves: {}
     };
-    for (var k = 0; k < SPECIES.length; k++)
+    for (var k = 0; k < SPECIES.length; k++) {
         w.animals[SPECIES[k]] = [];
+        w.ext[SPECIES[k]] = 0;
+        w.gone[SPECIES[k]] = false;
+    }
 
     // A seed that gives a world with hardly any water or land is not worth watching: take the next one
     for (var tries = 0; ; tries++) {
@@ -249,6 +328,8 @@ function create(opts) {
     }
     w.springs = w.candidates.slice(0, w.signals.springs);
     calcMoist(w);
+    for (k = 0; k < SPECIES.length; k++)
+        addAnimals(w, SPECIES[k], KINDS[SPECIES[k]].start, false);
     return w;
 }
 
@@ -323,11 +404,12 @@ function easeLift(w) {
 
 function cells(w, rain) {
     var cols = w.cols, rows = w.rows, type = w.type, elev = w.elev, lift = w.lift, bio = w.bio, fert = w.fert, age = w.age;
-    var worm = w.worm, rest = w.rest, stress = w.stress, burn = w.burn, moist = w.moist, F = w.rules, rng = w.rng, level = w.level;
+    var worm = w.worm, plank = w.plank, rest = w.rest, stress = w.stress, burn = w.burn, moist = w.moist, F = w.rules, rng = w.rng, level = w.level;
     for (var j = 0; j < rows; j++)
         for (var i = 0; i < cols; i++) {
             var p = j * cols + i, t = type[p], e = elev[p] + lift[p];
             if (t <= T.SHALLOW) {
+                plank[p] = Math.min(1, plank[p] + 0.0006 * (0.3 + (t ? 0.5 : 0)));
                 if (F.tide) {
                     // Islands lift the sea floor too, and a floor that sank back is deep again
                     if (t === T.DEEP && e > 0.308)
@@ -342,6 +424,7 @@ function cells(w, rain) {
             }
             if (F.tide && e < level - 0.008) {
                 type[p] = T.SHALLOW;
+                plank[p] = 0.3;
                 continue;
             }
             var nb = NEIGHBOURS[(rng() * 4) | 0], a = i + nb[0], b = j + nb[1];
@@ -381,7 +464,7 @@ function cells(w, rain) {
                 }
             } else if (t === T.FOREST) {
                 age[p]++;
-                bio[p] = Math.min(1, bio[p] + 0.0007 * rain * (0.4 + fert[p]));
+                bio[p] = Math.min(1, bio[p] + BERRY_GROWTH * rain * (0.4 + fert[p]));
                 worm[p] = Math.min(1, worm[p] + WORM_GROWTH * rain * (0.2 + moist[p]) * (0.4 + fert[p]));
                 if (F.spread && q >= 0 && age[p] > 150 && type[q] === T.GRASS && bio[q] > 0.6 && rng() < 0.002) {
                     type[q] = T.FOREST;
@@ -440,6 +523,478 @@ function cells(w, rain) {
             worm[c] = 0;
 }
 
+function typeAt(w, x, y) {
+    return x < 0 || y < 0 || x >= w.cols || y >= w.rows ? -1 : w.type[(y | 0) * w.cols + (x | 0)];
+}
+
+function cellAt(w, x, y) {
+    return (y | 0) * w.cols + (x | 0);
+}
+
+function newAnimal() {
+    return {
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        e: 1,
+        th: 0,
+        h: 0.1,
+        g: 0,
+        dead: false
+    };
+}
+
+function place(w, k, a) {
+    for (var n = 0; n < 400; n++) {
+        a.x = w.rng() * w.cols;
+        a.y = w.rng() * w.rows;
+        if (KINDS[k].ok(typeAt(w, a.x, a.y)))
+            return true;
+    }
+    return false;
+}
+
+// Arrivals come in from the edge of the map; the first animals of a world are scattered over it
+function makeAnimal(w, k, edge) {
+    var a = newAnimal();
+    for (var n = 0; edge && n < 200; n++) {
+        var side = w.rng() < 0.5;
+        a.x = side ? (w.rng() < 0.5 ? 0.5 : w.cols - 0.5) : w.rng() * w.cols;
+        a.y = side ? w.rng() * w.rows : (w.rng() < 0.5 ? 0.5 : w.rows - 0.5);
+        if (KINDS[k].ok(typeAt(w, a.x, a.y)))
+            return a;
+    }
+    return place(w, k, a) ? a : null;
+}
+
+function addAnimals(w, k, n, edge) {
+    for (var i = 0; i < n; i++) {
+        var a = makeAnimal(w, k, edge);
+        if (!a)
+            continue;
+        if (k === "sheep")
+            a.h = w.rules.evolve ? w.rng() * 0.2 : 0.1;
+        w.animals[k].push(a);
+    }
+}
+
+function wander(w) {
+    return (w.rng() - 0.5) * 0.06;
+}
+
+// First direction, from a random starting one, in which some distance in radii satisfies test
+function find(w, a, radii, test) {
+    var o = (w.rng() * 8) | 0;
+    for (var r = 0; r < radii.length; r++)
+        for (var k = 0; k < 8; k++) {
+            var d = DIRS[(k + o) & 7];
+            if (test(a.x + d[0] * radii[r], a.y + d[1] * radii[r]))
+                return d;
+        }
+    return null;
+}
+
+function nearest(a, list, maxd, filter) {
+    var best = null, bd = maxd;
+    for (var n = 0; n < list.length; n++) {
+        var o = list[n];
+        if (o.dead || (filter && !filter(o)))
+            continue;
+        var d = Math.hypot(o.x - a.x, o.y - a.y);
+        if (d < bd) {
+            bd = d;
+            best = o;
+        }
+    }
+    return best ? {
+        o: best,
+        d: bd
+    } : null;
+}
+
+// Springs are drinking places for sheep as well as water
+function springAt(w, x, y) {
+    for (var s = 0; s < w.springs.length; s++)
+        if (Math.hypot(x - w.springs[s].x, y - w.springs[s].y) < 1.6)
+            return true;
+    return false;
+}
+
+function move(w, k, a, dx, dy) {
+    var K = KINDS[k];
+    a.vx = a.vx * 0.85 + dx;
+    a.vy = a.vy * 0.85 + dy;
+    var sp = Math.hypot(a.vx, a.vy);
+    if (sp > K.speed) {
+        a.vx *= K.speed / sp;
+        a.vy *= K.speed / sp;
+    }
+    if (!K.ok(typeAt(w, a.x, a.y))) {
+        // stranded by a shore moving or a fire
+        for (var r = 1; r <= 3; r++)
+            for (var n = 0; n < 8; n++)
+                if (K.ok(typeAt(w, a.x + DIRS[n][0] * r, a.y + DIRS[n][1] * r))) {
+                    a.x += DIRS[n][0] * 0.4;
+                    a.y += DIRS[n][1] * 0.4;
+                    return;
+                }
+        if (!place(w, k, a))
+            a.dead = true;
+        return;
+    }
+    var nx = a.x + a.vx, ny = a.y + a.vy;
+    if (K.ok(typeAt(w, nx, ny))) {
+        a.x = nx;
+        a.y = ny;
+    } else if (K.ok(typeAt(w, nx, a.y))) {
+        a.x = nx;
+        a.vy = -a.vy * 0.5;
+    } else if (K.ok(typeAt(w, a.x, ny))) {
+        a.y = ny;
+        a.vx = -a.vx * 0.5;
+    } else {
+        a.vx = -a.vx * 0.6;
+        a.vy = -a.vy * 0.6;
+    }
+}
+
+// The steering helpers add to v, the push an animal gets this step
+function pull(v, d, weight) {
+    v.x += d[0] * weight;
+    v.y += d[1] * weight;
+}
+
+// Loosely follows a few of its own kind and keeps clear of the ones right next to it
+function flock(w, a, list, v) {
+    for (var n = 0; n < 5; n++) {
+        var o = list[(w.rng() * list.length) | 0];
+        if (!o || o === a)
+            continue;
+        var ox = o.x - a.x, oy = o.y - a.y, d = Math.hypot(ox, oy) || 1;
+        if (d < 14) {
+            var s = d < 2 ? -0.02 : 0.004;
+            v.x += ox / d * s;
+            v.y += oy / d * s;
+        }
+    }
+}
+
+function flee(a, list, range, weight, v) {
+    for (var n = 0; n < list.length; n++) {
+        var ox = list[n].x - a.x, oy = list[n].y - a.y, d = Math.hypot(ox, oy);
+        if (d < range && d > 0) {
+            v.x -= ox / d * weight;
+            v.y -= oy / d * weight;
+        }
+    }
+}
+
+function chase(a, target, weight, v) {
+    var d = target.d || 1e-6;
+    v.x += (target.o.x - a.x) / d * weight;
+    v.y += (target.o.y - a.y) / d * weight;
+}
+
+function fireNear(w, x, y, r) {
+    for (var dy = -r; dy <= r; dy++)
+        for (var dx = -r; dx <= r; dx++) {
+            var a = x + dx, b = y + dy;
+            if (a >= 0 && b >= 0 && a < w.cols && b < w.rows && w.type[b * w.cols + a] === T.FIRE)
+                return [dx, dy];
+        }
+    return null;
+}
+
+function animals(w) {
+    var A = w.animals, F = w.rules, rng = w.rng, cols = w.cols, rows = w.rows;
+    var type = w.type, bio = w.bio, fert = w.fert, worm = w.worm, plank = w.plank, age = w.age, moist = w.moist;
+    var sheep = A.sheep, fish = A.fish, bird = A.bird, shark = A.shark, wolf = A.wolf, hawk = A.hawk;
+    var v = {
+        x: 0,
+        y: 0
+    };
+    var isWater = function (x, y) {
+        var t = typeAt(w, x, y);
+        return t === T.SHALLOW || springAt(w, x, y);
+    };
+    var isLand = function (x, y) {
+        return typeAt(w, x, y) >= T.SAND;
+    };
+    var isGoodGrass = function (x, y) {
+        return typeAt(w, x, y) === T.GRASS && bio[cellAt(w, x, y)] > 0.45;
+    };
+    var isPlankton = function (x, y) {
+        var t = typeAt(w, x, y);
+        return t >= 0 && t <= T.SHALLOW && plank[cellAt(w, x, y)] > 0.35;
+    };
+    // Berries on trees, worms in the soil under grass and trees
+    var isBirdFood = function (x, y) {
+        var t = typeAt(w, x, y);
+        if (t !== T.GRASS && t !== T.FOREST)
+            return false;
+        var p = cellAt(w, x, y);
+        return (t === T.FOREST && bio[p] > 0.3) || worm[p] > 0.3;
+    };
+    var inShallows = function (o) {
+        return typeAt(w, o.x, o.y) === T.SHALLOW;
+    };
+
+    for (var n = 0; n < sheep.length; n++) {
+        var s = sheep[n], t = typeAt(w, s.x, s.y), p = cellAt(w, s.x, s.y), d = null, weight = 0;
+        v.x = wander(w);
+        v.y = wander(w);
+        s.th += 0.0012;
+        if (t === T.SHALLOW || springAt(w, s.x, s.y))
+            s.th = 0;
+        if (s.th > 1) {
+            d = find(w, s, [3, 6, 10, 16, 24, 34], isWater);
+            weight = 0.06;
+        }
+        if (!d && t === T.SHALLOW) {
+            d = find(w, s, [2], isLand);
+            weight = 0.15;
+        }
+        if (!d && (s.e < 1 || bio[p] < 0.2)) {
+            d = find(w, s, F.migrate ? [2, 5, 9, 16] : [2, 5, 9], isGoodGrass);
+            weight = 0.05;
+        }
+        if (d)
+            pull(v, d, weight);
+        if (F.fear)
+            flee(s, wolf, 7, 0.08, v);
+        var f = fireNear(w, s.x | 0, s.y | 0, 6);
+        if (f) {
+            var m = Math.hypot(f[0], f[1]) || 1;
+            v.x -= f[0] / m * 0.2;
+            v.y -= f[1] / m * 0.2;
+        }
+        flock(w, s, sheep, v);
+        move(w, "sheep", s, v.x, v.y);
+        var t2 = typeAt(w, s.x, s.y), p2 = cellAt(w, s.x, s.y);
+        if (t2 === T.GRASS) {
+            var eat = Math.min(bio[p2], 0.05);
+            bio[p2] -= eat;
+            s.e += eat * 0.8 * (1 - 0.6 * s.h);
+            age[p2] = 0;
+        } else if (t2 === T.FOREST && F.browse) {
+            s.e += 0.004;
+            age[p2] = 0;
+            if (rng() < 0.0012) {
+                type[p2] = T.GRASS;
+                bio[p2] = 0.3;
+                age[p2] = 0;
+            }
+        } else if (t2 === T.DESERT)
+            s.e += 0.010 * s.h;
+        else if (t2 === T.FIRE)
+            s.dead = true;
+        if (F.dung && s.e > 1 && t2 >= T.SAND && t2 <= T.DESERT && rng() < 0.02) {
+            fert[p2] = Math.min(1.5, fert[p2] + 0.05);
+            var r = NEIGHBOURS[(rng() * 4) | 0], a = (s.x | 0) + r[0], b = (s.y | 0) + r[1];
+            if (a >= 0 && b >= 0 && a < cols && b < rows) {
+                var q = b * cols + a;
+                if ((type[q] === T.SAND || type[q] === T.DESERT) && moist[q] > 0.2 && rng() < 0.5) {
+                    type[q] = T.GRASS;
+                    bio[q] = 0.2;
+                    age[q] = 0;
+                }
+            }
+        }
+        s.e -= 0.008 + (s.th > 1.6 ? 0.004 : 0);
+    }
+
+    for (n = 0; n < fish.length; n++) {
+        var fi = fish[n];
+        v.x = wander(w);
+        v.y = wander(w);
+        if (fi.e < 1.2) {
+            d = find(w, fi, [3, 6, 10], isPlankton);
+            if (d)
+                pull(v, d, 0.05);
+        }
+        flee(fi, shark, 8, 0.2, v);
+        flock(w, fi, fish, v);
+        move(w, "fish", fi, v.x, v.y);
+        t2 = typeAt(w, fi.x, fi.y);
+        if (t2 >= 0 && t2 <= T.SHALLOW) {
+            var cell = cellAt(w, fi.x, fi.y), bite = Math.min(plank[cell], 0.04);
+            plank[cell] -= bite;
+            fi.e += bite;
+        }
+        fi.e -= 0.006;
+    }
+
+    for (n = 0; n < bird.length; n++) {
+        var bi = bird[n];
+        v.x = wander(w);
+        v.y = wander(w);
+        if (bi.e < 1.2) {
+            d = find(w, bi, [3, 6, 10, 16], isBirdFood);
+            if (d)
+                pull(v, d, 0.05);
+        }
+        if (F.fear)
+            flee(bi, hawk, 8, 0.2, v);
+        flock(w, bi, bird, v);
+        move(w, "bird", bi, v.x, v.y);
+        t2 = typeAt(w, bi.x, bi.y);
+        p2 = cellAt(w, bi.x, bi.y);
+        var got = 0;
+        if (t2 === T.FOREST) {
+            got = Math.min(bio[p2], BERRY_BITE);
+            bio[p2] -= got;
+        }
+        if (t2 === T.GRASS || t2 === T.FOREST) {
+            var wormBite = Math.min(worm[p2], BERRY_BITE - got);
+            worm[p2] -= wormBite;
+            got += wormBite;
+        }
+        bi.e += got * BITE_GAIN;
+        if (F.guano && bi.e < 1 && t2 === T.SHALLOW) {
+            var prey = nearest(bi, fish, 1.5);
+            if (prey && rng() < 0.05) {
+                prey.o.dead = true;
+                bi.e += 0.6;
+                bi.g = 1;
+            }
+        }
+        if (F.guano && bi.g && t2 >= T.SAND && t2 <= T.FOREST) {
+            bi.g = 0;
+            fert[p2] = Math.min(1.5, fert[p2] + 0.3);
+            if (t2 === T.SAND && moist[p2] > 0.3) {
+                type[p2] = T.GRASS;
+                bio[p2] = 0.2;
+                age[p2] = 0;
+            } else if (t2 === T.GRASS || t2 === T.FOREST)
+                bio[p2] = Math.min(1, bio[p2] + 0.2);
+            emit(w, "guano", 600);
+        }
+        bi.e -= 0.008;
+    }
+
+    for (n = 0; n < shark.length; n++) {
+        var sh = shark[n], target = null, isSheep = false;
+        v.x = wander(w);
+        v.y = wander(w);
+        if (sh.e < 1.4) {
+            target = nearest(sh, fish, 22);
+            if (!target && F.cross) {
+                target = nearest(sh, sheep, 22, inShallows);
+                isSheep = !!target;
+            }
+        }
+        if (target) {
+            chase(sh, target, 0.14, v);
+            if (target.d < 1.4) {
+                target.o.dead = true;
+                sh.e += isSheep ? 1 : 0.5;
+                if (isSheep)
+                    emit(w, "shark_sheep", 300);
+            }
+        }
+        move(w, "shark", sh, v.x, v.y);
+        sh.e -= 0.004;
+    }
+
+    for (n = 0; n < wolf.length; n++) {
+        var wo = wolf[n], isFish = false;
+        target = null;
+        v.x = wander(w);
+        v.y = wander(w);
+        if (wo.e < 1.4)
+            target = nearest(wo, sheep, 28);
+        if (!target && F.cross && wo.e < 0.8) {
+            target = nearest(wo, fish, 5, inShallows);
+            isFish = !!target;
+        }
+        if (target) {
+            chase(wo, target, 0.1, v);
+            if (target.d < 1.4) {
+                target.o.dead = true;
+                wo.e += isFish ? 0.5 : 1;
+                if (isFish)
+                    emit(w, "wolf_fish", 300);
+            }
+        }
+        move(w, "wolf", wo, v.x, v.y);
+        wo.e -= 0.004;
+    }
+
+    for (n = 0; n < hawk.length; n++) {
+        var ha = hawk[n];
+        target = null;
+        v.x = wander(w);
+        v.y = wander(w);
+        if (ha.e < 1.4)
+            target = nearest(ha, bird, 30);
+        if (target) {
+            chase(ha, target, 0.16, v);
+            if (target.d < 1.4) {
+                target.o.dead = true;
+                ha.e += 0.7;
+            }
+        }
+        if (F.cross && ha.e < 1.2 && typeAt(w, ha.x, ha.y) === T.SHALLOW) {
+            prey = nearest(ha, fish, 1.6);
+            if (prey && rng() < 0.04) {
+                prey.o.dead = true;
+                ha.e += 0.5;
+                emit(w, "hawk_fish", 300);
+            }
+        }
+        move(w, "hawk", ha, v.x, v.y);
+        ha.e -= 0.004;
+    }
+}
+
+// Removes the dead and the starved, lets the well fed breed, and brings back a species that has died out
+function lifecycle(w) {
+    var F = w.rules;
+    for (var i = 0; i < SPECIES.length; i++) {
+        var k = SPECIES[i], K = KINDS[k], list = w.animals[k], born = [], breedE = K.cap > 10 ? 1.5 : 2;
+        for (var n = list.length - 1; n >= 0; n--) {
+            var a = list[n];
+            if (a.dead || (F.pop && a.e <= 0)) {
+                list.splice(n, 1);
+                continue;
+            }
+            if (!F.pop) {
+                a.e = Math.min(1.2, Math.max(a.e, 0.5));
+                continue;
+            }
+            if (a.e > breedE && list.length + born.length < K.cap) {
+                a.e = K.cap > 10 ? 0.8 : 1;
+                var c = newAnimal();
+                c.x = a.x;
+                c.y = a.y;
+                c.e = a.e;
+                c.h = F.evolve ? Math.min(1, Math.max(0, a.h + (w.rng() - 0.5) * 0.12)) : 0.1;
+                born.push(c);
+            }
+        }
+        for (n = 0; n < born.length; n++)
+            list.push(born[n]);
+        if (list.length === 0) {
+            if (!w.gone[k]) {
+                w.gone[k] = true;
+                emit(w, "extinct", 0, k);
+            }
+            if (F.respawn && ++w.ext[k] > RESPAWN_AFTER) {
+                addAnimals(w, k, K.arrive, true);
+                if (list.length > 0) {
+                    w.ext[k] = 0;
+                    w.gone[k] = false;
+                    emit(w, "arrive", 0, k);
+                }
+            }
+        } else {
+            w.ext[k] = 0;
+            w.gone[k] = false;
+        }
+    }
+}
+
 function step(w) {
     w.tick++;
     var rain = rainNow(w);
@@ -447,6 +1002,8 @@ function step(w) {
     if (w.lifting)
         easeLift(w);
     cells(w, rain);
+    animals(w);
+    lifecycle(w);
 
     // Mercy rains: a world that is mostly desert gets monsoon rain until it has recovered
     if (w.tick % 50 === 0) {

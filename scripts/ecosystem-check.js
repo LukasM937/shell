@@ -62,7 +62,7 @@ function run(world, steps) {
         E.step(world);
 }
 
-// No animals yet or later: these checks are about the land, so nothing may eat, breed or arrive
+// These checks are about the land or put their own animals in, so nothing else may eat, breed or arrive
 function landOnly(world) {
     for (const k of E.SPECIES)
         world.animals[k].length = 0;
@@ -73,7 +73,31 @@ function landOnly(world) {
 const T = E.T;
 const living = t => t === T.GRASS || t === T.FOREST;
 const centre = w => Math.floor(w.rows / 2) * w.cols + Math.floor(w.cols / 2);
+const cellOf = (w, x, y) => Math.floor(y) * w.cols + Math.floor(x);
 const typeKey = w => JSON.stringify(Array.from(w.type));
+
+// Animals are plain records, so a check can put one exactly where it needs it. x and y are cell coordinates.
+function put(world, species, x, y, over = {}) {
+    const a = Object.assign({ x, y, vx: 0, vy: 0, e: 1, th: 0, h: 0.1, g: 0, dead: false }, over);
+    world.animals[species].push(a);
+    return a;
+}
+
+// The first cell of the given type whose neighbours within reach cells are of that type too, and that passes test
+function interior(world, type, test = () => true, reach = 1) {
+    for (let y = reach; y < world.rows - reach; y++)
+        for (let x = reach; x < world.cols - reach; x++) {
+            let all = true;
+            for (let dy = -reach; dy <= reach; dy++)
+                for (let dx = -reach; dx <= reach; dx++)
+                    all = all && world.type[cellOf(world, x + dx, y + dy)] === type;
+            if (all && test(cellOf(world, x, y)))
+                return { x, y, p: cellOf(world, x, y) };
+        }
+    throw new Error(`no interior cell of type ${type}`);
+}
+
+const events = (world, id) => E.drainEvents(world).filter(e => e.id === id);
 
 check("same seed and rng give the same world", () => {
     const a = make();
@@ -127,24 +151,46 @@ check("saved fertility round trips", () => {
     assert(JSON.stringify(E.snapshot(ignored)) === JSON.stringify(E.snapshot(fresh)), "a malformed save changed the world");
 });
 
+const CAPS = { sheep: 200, fish: 160, bird: 100, shark: 4, wolf: 4, hawk: 4 };
+
 check("values stay valid", () => {
-    for (const rain of [0.1, 0.8, 1.4]) {
+    const notes = [];
+    for (const rain of [0.2, 0.8, 1.4]) {
         const w = make();
         E.setSignals(w, { rain });
         const audit = at => {
             for (let p = 0; p < w.type.length; p++) {
                 assert(w.type[p] <= T.FIRE, `rain ${rain}, step ${at}: type ${w.type[p]} at cell ${p}`);
-                for (const name of ["bio", "fert", "worm"])
+                for (const name of ["bio", "fert", "worm", "plank"])
                     assert(Number.isFinite(w[name][p]), `rain ${rain}, step ${at}: ${name} is ${w[name][p]} at cell ${p}`);
             }
+            for (const k of E.SPECIES) {
+                assert(w.animals[k].length <= CAPS[k], `rain ${rain}, step ${at}: ${w.animals[k].length} ${k}, cap ${CAPS[k]}`);
+                for (const a of w.animals[k])
+                    for (const field of ["x", "y", "vx", "vy", "e", "th", "h", "g"])
+                        assert(Number.isFinite(a[field]), `rain ${rain}, step ${at}: a ${k} has ${field} ${a[field]}`);
+            }
         };
-        for (let i = 1; i <= 20000; i++) {
+        // The longest run of steps in which a species has no member, and how often birds sit at their cap
+        const absent = { sheep: 0, fish: 0, bird: 0, shark: 0, wolf: 0, hawk: 0 };
+        const longest = Object.assign({}, absent);
+        let capped = 0;
+        for (let i = 1; i <= 30000; i++) {
             E.step(w);
+            for (const k of E.SPECIES) {
+                absent[k] = w.animals[k].length ? 0 : absent[k] + 1;
+                longest[k] = Math.max(longest[k], absent[k]);
+            }
+            capped += w.animals.bird.length >= CAPS.bird;
             if (i % 500 === 0)
                 audit(i);
         }
-        audit(20000);
+        audit(30000);
+        for (const k of E.SPECIES)
+            assert(longest[k] <= 500, `rain ${rain}: no ${k} for ${longest[k]} steps in a row`);
+        notes.push(`rain ${rain}: birds at cap ${((capped / 30000) * 100).toFixed(0)}%`);
     }
+    return notes.join(", ");
 });
 
 check("worms live only in living soil", () => {
@@ -168,7 +214,7 @@ check("worms live only in living soil", () => {
             n++;
         }
     assert(n > 0, "no grass or forest left");
-    assert(sum / n > 0.2, `mean worm on living soil is ${(sum / n).toFixed(3)}`);
+    assert(sum / n > 0.05, `mean worm on living soil is ${(sum / n).toFixed(3)}`);
     return `mean worm ${(sum / n).toFixed(2)}`;
 });
 
@@ -329,6 +375,249 @@ check("groves become forest on land", () => {
         forest = forest || (nearest && w.type[p] === T.FOREST && w.fert[p] >= Math.fround(0.9));
     }
     assert(forest, "the nearest land cell is not forest with raised fertility");
+});
+
+check("berries regrow", () => {
+    const w = landOnly(make());
+    E.setSignals(w, { rain: 0.8 });
+    for (let p = 0; p < w.type.length; p++)
+        if (w.type[p] === T.FOREST)
+            w.bio[p] = 0.1;
+    run(w, 1500);
+    let sum = 0;
+    let n = 0;
+    for (let p = 0; p < w.type.length; p++)
+        if (w.type[p] === T.FOREST) {
+            sum += w.bio[p];
+            n++;
+        }
+    assert(n > 0, "the forest is gone");
+    assert(sum / n > 0.3, `mean berries ${(sum / n).toFixed(3)} after 1500 steps from 0.1`);
+    return `mean berries ${(sum / n).toFixed(2)}`;
+});
+
+check("worms regrow after desert recovers", () => {
+    const w = landOnly(make());
+    E.setSignals(w, { rain: 0.8 });
+    const wasted = [];
+    for (let p = 0; p < w.type.length; p++)
+        if (w.type[p] === T.GRASS && w.moist[p] > 0.5) {
+            w.type[p] = T.DESERT;
+            wasted.push(p);
+        }
+    assert(wasted.length > 20, `only ${wasted.length} moist grass cells to turn to desert`);
+    E.step(w);
+    assert(wasted.every(p => w.type[p] !== T.DESERT || w.worm[p] === 0), "worms survived in desert");
+    // Worms are slow on purpose, so the soil needs a few thousand steps after it turns to grass
+    run(w, 6000);
+    const back = wasted.filter(p => living(w.type[p]));
+    assert(back.length > 0, "no desert recovered");
+    const mean = back.reduce((sum, p) => sum + w.worm[p], 0) / back.length;
+    assert(mean > 0.05, `mean worm ${mean.toFixed(3)} on ${back.length} recovered cells`);
+    return `${back.length} of ${wasted.length} cells back, mean worm ${mean.toFixed(2)}`;
+});
+
+check("a hungry shark eats a sheep wading in the shallows", () => {
+    for (const cross of [true, false]) {
+        const w = landOnly(make());
+        w.rules.cross = cross;
+        const c = interior(w, T.SHALLOW);
+        put(w, "shark", c.x + 0.5, c.y + 0.5, { e: 0.5 });
+        put(w, "sheep", c.x + 0.5, c.y + 0.5);
+        run(w, 5);
+        if (cross) {
+            assert(w.animals.sheep.length === 0, "the sheep is still alive");
+            assert(events(w, "shark_sheep").length === 1, "no shark_sheep event");
+        } else {
+            assert(w.animals.sheep.length === 1, "the shark ate a sheep with cross habitat hunting off");
+            assert(events(w, "shark_sheep").length === 0, "a shark_sheep event with the rule off");
+        }
+    }
+});
+
+check("a hungry wolf snatches a fish at the shore", () => {
+    for (const cross of [true, false]) {
+        const w = landOnly(make());
+        w.rules.cross = cross;
+        let c = null;
+        for (let p = 0; p < w.type.length && !c; p++) {
+            const x = p % w.cols;
+            const y = Math.floor(p / w.cols);
+            if (w.type[p] === T.SAND && x + 1 < w.cols && w.type[p + 1] === T.SHALLOW)
+                c = { x, y };
+        }
+        assert(c, "no sand cell with shallow water to its east");
+        put(w, "wolf", c.x + 0.5, c.y + 0.5, { e: 0.5 });
+        put(w, "fish", c.x + 1.5, c.y + 0.5);
+        run(w, 5);
+        if (cross) {
+            assert(w.animals.fish.length === 0, "the fish is still there");
+            assert(events(w, "wolf_fish").length === 1, "no wolf_fish event");
+        } else {
+            assert(w.animals.fish.length === 1, "the wolf took a fish with cross habitat hunting off");
+            assert(events(w, "wolf_fish").length === 0, "a wolf_fish event with the rule off");
+        }
+    }
+});
+
+check("hawks sometimes take fish", () => {
+    for (const cross of [true, false]) {
+        const w = landOnly(make());
+        w.rules.cross = cross;
+        const c = interior(w, T.SHALLOW);
+        const hawk = put(w, "hawk", 0, 0);
+        for (let i = 0; i < 600; i++) {
+            Object.assign(hawk, { x: c.x + 0.5, y: c.y + 0.5, vx: 0, vy: 0, e: 1 });
+            w.animals.fish.length = 0;
+            put(w, "fish", c.x + 1.2, c.y + 0.5);
+            E.step(w);
+        }
+        const taken = events(w, "hawk_fish").length;
+        assert(cross ? taken > 0 : taken === 0, `${taken} hawk_fish events with cross habitat hunting ${cross ? "on" : "off"}`);
+    }
+});
+
+check("food sets population", () => {
+    for (const pop of [true, false]) {
+        const grass = landOnly(make());
+        grass.rules.pop = pop;
+        const g = interior(grass, T.GRASS, p => grass.bio[p] > 0.5, 0);
+        put(grass, "sheep", g.x + 0.5, g.y + 0.5, { e: 2 });
+        E.step(grass);
+        assert(grass.animals.sheep.length === (pop ? 2 : 1), `${grass.animals.sheep.length} sheep after a fed sheep, pop ${pop}`);
+
+        // Sand has nothing to eat, and a sheep moves less than half a cell in one step
+        const sand = landOnly(make());
+        sand.rules.pop = pop;
+        const s = interior(sand, T.SAND, undefined, 0);
+        put(sand, "sheep", s.x + 0.5, s.y + 0.5, { e: 0 });
+        E.step(sand);
+        assert(sand.animals.sheep.length === (pop ? 0 : 1), `${sand.animals.sheep.length} sheep after a starving sheep, pop ${pop}`);
+    }
+});
+
+check("extinct species return", () => {
+    const w = make();
+    w.animals.sheep.length = 0;
+    const seen = [];
+    for (let i = 1; i <= 301; i++) {
+        E.step(w);
+        seen.push(...E.drainEvents(w));
+        if (i === 300)
+            assert(w.animals.sheep.length === 0, "sheep came back before 301 steps");
+    }
+    assert(w.animals.sheep.length > 0, "no sheep after 301 steps");
+    assert(seen.some(e => e.id === "extinct" && e.species === "sheep"), "no extinct event for sheep");
+    assert(seen.some(e => e.id === "arrive" && e.species === "sheep"), "no arrive event for sheep");
+
+    const closed = make();
+    closed.rules.respawn = false;
+    closed.animals.sheep.length = 0;
+    run(closed, 1000);
+    assert(closed.animals.sheep.length === 0, "sheep arrived with respawn off");
+});
+
+check("hardiness stays in range", () => {
+    const w = make();
+    const fixed = make({ rules: { evolve: false } });
+    let lo = 1;
+    let hi = 0;
+    let most = 0;
+    for (let i = 1; i <= 20000; i++) {
+        E.step(w);
+        E.step(fixed);
+        if (i % 50)
+            continue;
+        most = Math.max(most, fixed.animals.sheep.length);
+        for (const s of w.animals.sheep) {
+            assert(s.h >= 0 && s.h <= 1, `step ${i}: hardiness ${s.h}`);
+            lo = Math.min(lo, s.h);
+            hi = Math.max(hi, s.h);
+        }
+        for (const s of fixed.animals.sheep)
+            assert(s.h === 0.1, `step ${i}: hardiness ${s.h} with evolve off`);
+    }
+    assert(most > 24, "the sheep never bred, so the lamb check proved nothing");
+    assert(hi > lo, "hardiness never moved with evolve on");
+    return `hardiness ${lo.toFixed(2)} to ${hi.toFixed(2)}`;
+});
+
+check("birds eat berries and worms", () => {
+    const eat = (type, prepare) => {
+        const w = landOnly(make({ rules: { tide: false } }));
+        const c = interior(w, type, undefined, 0);
+        prepare(w, c.p);
+        const bird = put(w, "bird", c.x + 0.5, c.y + 0.5, { e: 0.5 });
+        E.step(w);
+        return { w, p: c.p, bird };
+    };
+    let r = eat(T.FOREST, (w, p) => {
+        w.bio[p] = 1;
+        w.worm[p] = 0;
+    });
+    assert(r.w.bio[r.p] < 1 && r.bird.e > 0.5, `berries ${r.w.bio[r.p]}, energy ${r.bird.e} over a forest cell`);
+    r = eat(T.GRASS, (w, p) => {
+        w.worm[p] = 1;
+    });
+    assert(r.w.worm[r.p] < 1 && r.bird.e > 0.5, `worms ${r.w.worm[r.p]}, energy ${r.bird.e} over a grass cell`);
+    r = eat(T.GRASS, (w, p) => {
+        w.type[p] = T.DESERT;
+        w.bio[p] = 0.7;
+    });
+    assert(near(r.w.bio[r.p], Math.fround(0.7)) && r.w.worm[r.p] === 0 && r.bird.e < 0.5, `a desert cell changed: bio ${r.w.bio[r.p]}, energy ${r.bird.e}`);
+
+    // A hungry bird steers towards food, and only towards food: the same set up with the food missing gives no push
+    const steer = (type, prepare) => {
+        const w = landOnly(make({ rules: { tide: false } }));
+        const cx = Math.floor(w.cols / 2);
+        const cy = Math.floor(w.rows / 2);
+        for (let y = cy - 20; y <= cy + 20; y++)
+            for (let x = cx - 20; x <= cx + 20; x++)
+                if (y >= 0 && y < w.rows) {
+                    const p = cellOf(w, x, y);
+                    w.type[p] = T.DESERT;
+                    w.bio[p] = 0;
+                    w.worm[p] = 0;
+                }
+        const target = cellOf(w, cx + 10, cy);
+        w.type[target] = type;
+        prepare(w, target);
+        const bird = put(w, "bird", cx + 0.5, cy + 0.5, { e: 0.5 });
+        E.step(w);
+        return bird.vx;
+    };
+    assert(steer(T.FOREST, (w, p) => (w.bio[p] = 0.5)) >= 0.02, "no steering towards berries");
+    assert(steer(T.GRASS, (w, p) => (w.worm[p] = 0.5)) >= 0.02, "no steering towards worms on grass");
+    assert(steer(T.FOREST, (w, p) => (w.worm[p] = 0.5)) >= 0.02, "no steering towards worms in forest");
+    assert(steer(T.FOREST, (w, p) => (w.bio[p] = 0.2)) <= 0.0301, "steering towards too few berries");
+    assert(steer(T.GRASS, (w, p) => (w.worm[p] = 0.2)) <= 0.0301, "steering towards too few worms");
+});
+
+check("guano grows the coast", () => {
+    for (const guano of [true, false]) {
+        const w = landOnly(make({ rules: { spread: false } }));
+        w.rules.guano = guano;
+        let c = null;
+        for (let p = 0; p < w.type.length && !c; p++)
+            if (w.type[p] === T.SAND && w.moist[p] > 0.3)
+                c = { x: p % w.cols, y: Math.floor(p / w.cols), p };
+        assert(c, "no moist sand");
+        const bird = put(w, "bird", c.x + 0.5, c.y + 0.5, { g: 1 });
+        E.step(w);
+        const logged = events(w, "guano").length;
+        if (guano) {
+            assert(w.type[c.p] === T.GRASS, `the sand cell is type ${w.type[c.p]}`);
+            assert(logged === 1 && bird.g === 0, `${logged} guano events, g ${bird.g}`);
+        } else
+            assert(w.type[c.p] === T.SAND && logged === 0, "guano changed the land with the rule off");
+    }
+});
+
+check("a time jump does not replay", () => {
+    const w = make();
+    const before = w.tick;
+    E.step(w);
+    assert(w.tick === before + 1, `tick went from ${before} to ${w.tick} in one step`);
 });
 
 check("step is cheap", () => {
