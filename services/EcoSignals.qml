@@ -84,6 +84,15 @@ Singleton {
         lightningLevel = smoothed(lightningLevel, Mapping.lightning(pings), Mapping.LIGHTNING_BASE);
     }
 
+    // ping exits 1 when no reply came and 2 when it could not try (no raw socket, unknown host, no route). Only a missing
+    // reply is loss; an error would otherwise hold the lightning at its maximum for good
+    function pingExited(exitCode: int): void {
+        if (exitCode === 0)
+            addPing(true);
+        else if (exitCode === 1)
+            addPing(false);
+    }
+
     function pingRound(): void {
         if (!routeProc.running)
             routeProc.running = true;
@@ -113,15 +122,17 @@ Singleton {
         }
     }
 
-    // A fresh start, so pings from an earlier screensaver do not set the lightning of this one
+    // A fresh start, so pings and neighbours from an earlier screensaver, maybe on another network, do not shape this one
     onActiveChanged: {
         if (active) {
             pings = [];
             lightningLevel = Mapping.LIGHTNING_BASE;
+            neighbours = [];
         }
     }
 
-    // Cpu and NetworkUsage only tick while something holds a reference
+    // Cpu and NetworkUsage only tick while something holds a reference, and busy needs them all the time; they read
+    // /proc about once a second (dashboard.resourceUpdateInterval)
     ServiceRef {
         service: Cpu
     }
@@ -173,13 +184,13 @@ Singleton {
     Process {
         id: gatewayPing
 
-        onExited: exitCode => root.addPing(exitCode === 0)
+        onExited: exitCode => root.pingExited(exitCode)
     }
 
     Process {
         id: hostPing
 
-        onExited: exitCode => root.addPing(exitCode === 0)
+        onExited: exitCode => root.pingExited(exitCode)
     }
 
     Process {

@@ -18,7 +18,7 @@ Singleton {
 
     property bool running
     property var world: null
-    // The last few, as {tick, text}
+    // Only the last few, since the lock screen shows one line and a long session must not grow the list
     property var events: []
     property int cols: 80
 
@@ -57,6 +57,8 @@ Singleton {
         return !!entry && typeof entry.seed === "number" && isFinite(entry.seed) && nums(entry.fert) && nums(entry.elev);
     }
 
+    // No bumps: the islands reach the world only as lift through setSignals on the first tick. Bumps given to create
+    // would also go into elev, be saved with it and count every island twice from then on
     function newWorld(load: bool): void {
         const input = EcoSignals.inputs;
         const c = screenCols();
@@ -68,8 +70,7 @@ Singleton {
         world = Eco.create({
             cols: c,
             seed: ok ? entry.seed : Mapping.seedFor(input.ssid),
-            saved: ok ? entry : undefined,
-            bumps: input.islands
+            saved: ok ? entry : undefined
         });
     }
 
