@@ -15,16 +15,21 @@ import qs.modules.lock
 // an IdleMonitor timeout counts from the last input, while the stages here count from the previous stage: a manual lock
 // still gets its full screensaver delay. So this runs relative timers on top of one short monitor instead.
 // The chain only ever turns the display off itself, and every way out of it (input, unlock, resume) goes through
-// apply("wake") so the screen is never left dark.
+// apply("wake") so the screen is never left dark. The one exception is a shell that restarts while the display is off:
+// it starts by lighting the display, since the flag that it was the chain is gone.
 Scope {
     id: root
 
     required property Lock lock
     readonly property bool hasPlayer: Players.list.some(p => p.isPlaying)
     readonly property bool isCharging: !UPower.onBattery
+    // On a machine without a battery inhibitWhenCharging keeps this true for good (same as IdleMonitors); it is off by default
     readonly property bool paused: (GlobalConfig.general.idle.inhibitWhenAudio && hasPlayer) || (GlobalConfig.general.idle.inhibitWhenCharging && isCharging)
     readonly property bool busy: StayActive.enabled || RuntimeState.inhibitIdle || hasPlayer || EcoSignals.busy
+    // A tick this much later than the last one means the computer slept or the clock jumped, not that a second went by
+    readonly property int resumeGapMs: 5000
     property var chain: Chain.create(Date.now())
+    property real lastTick: Date.now()
     // The display is off because of this chain, as opposed to the dpms timeouts of IdleMonitors
     property bool asleep
     // Input since the last tick. The monitor only stays active for a second after input, which a tick can miss
@@ -60,7 +65,24 @@ Scope {
         }
     }
 
+    // The clock jumped over a suspend, so the chain starts over: the lock screen gets its delays again
+    function restart(): void {
+        apply("wake");
+        chain = Chain.create(Date.now());
+    }
+
     function tick(): void {
+        // Past-due timers fire before logind's resume signal arrives, and a stage change on the old clock would turn the
+        // display off or suspend again as the lid opens. This also covers a clock that jumps without a resume
+        const now = Date.now();
+        const gap = now - lastTick;
+        lastTick = now;
+        if (gap > resumeGapMs || gap < 0) {
+            inputSeen = false;
+            restart();
+            return;
+        }
+
         const activity = !monitor.isIdle || inputSeen;
         inputSeen = false;
 
@@ -77,7 +99,7 @@ Scope {
             strayQuiet = false;
         }
 
-        Chain.update(chain, Date.now(), {
+        Chain.update(chain, now, {
             cfg: {
                 lockAfter: GlobalConfig.general.idle.lockAfter,
                 screensaverAfter: GlobalConfig.general.idle.screensaverAfter,
@@ -95,6 +117,10 @@ Scope {
             apply("wake");
     }
 
+    // A restarted shell does not know the display was off, and input would not wake it, so it lights it once.
+    // Turning on a display that is already on does nothing
+    Component.onCompleted: StayActive.setDpms(true)
+
     Connections {
         function onLockedChanged(): void {
             // Lock.qml clears the screensaver on unlock; a dark screen has to be woken here, since unlocking
@@ -108,9 +134,8 @@ Scope {
 
     Connections {
         function onResumed(): void {
-            // The clock jumped, so the chain starts over: the lock screen gets its delays again
-            root.apply("wake");
-            root.chain = Chain.create(Date.now());
+            // Backup for tick(), which normally notices the gap first
+            root.restart();
         }
 
         target: SessionManager
