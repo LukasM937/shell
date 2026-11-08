@@ -101,7 +101,9 @@ Scope {
 
         Chain.update(chain, now, {
             cfg: {
-                lockAfter: GlobalConfig.general.idle.lockAfter,
+                // lock.enabled only hides the password field, it does not stop the session locking. The chain must
+                // never lock on its own into a lock screen with no way to type the password
+                lockAfter: GlobalConfig.lock.enabled ? GlobalConfig.general.idle.lockAfter : 0,
                 screensaverAfter: GlobalConfig.general.idle.screensaverAfter,
                 displayOffAfter: GlobalConfig.general.idle.displayOffAfter,
                 sleepWhenDisplayOff: GlobalConfig.general.idle.sleepWhenDisplayOff

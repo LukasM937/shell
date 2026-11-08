@@ -147,14 +147,8 @@ PageBase {
             text: Tr.tr("Lock screen")
         }
 
-        ToggleRow {
-            first: true
-            text: Tr.tr("Enable lock screen")
-            checked: GlobalConfig.lock.enabled
-            onToggled: GlobalConfig.lock.enabled = checked
-        }
-
         SelectRow {
+            first: true
             label: Tr.tr("Background")
             subtext: Tr.tr("What is blurred behind the lock screen")
             menuItems: root.backgroundItems
