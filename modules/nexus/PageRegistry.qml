@@ -14,6 +14,12 @@ QtObject {
             description: Tr.tr("Wallpaper, fonts, colours"),
             category: "appearance"
         },
+        {
+            label: Tr.tr("Lock screen & screensaver"),
+            icon: "lock_clock",
+            description: Tr.tr("Idle chain, lock screen, screensaver"),
+            category: "appearance"
+        },
 
         // Connectivity
         // TODO

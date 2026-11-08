@@ -144,7 +144,8 @@ Item {
                 anchors.fill: parent
                 nState.screen: root.screen
                 nState.animatingContainer: nexus.opacity < 1
-                nState.currentPageIdx: ["appearance", "network", "bluetooth", "audio"].indexOf(root.queuedMode)
+                // Positions follow PageRegistry; "lock" is a placeholder no popout detaches to
+                nState.currentPageIdx: ["appearance", "lock", "network", "bluetooth", "audio"].indexOf(root.queuedMode)
                 onClose: root.close()
             }
         }

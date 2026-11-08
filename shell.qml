@@ -57,4 +57,7 @@ ShellRoot {
     IdleMonitors {
         lock: lock
     }
+    IdleChain {
+        lock: lock
+    }
 }

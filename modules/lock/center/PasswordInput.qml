@@ -14,6 +14,8 @@ StyledRect {
     required property real centerScale
     required property int centerWidth
     required property var lock
+    // The key that woke the screensaver, swallowed until it is let go so holding it does not type into the password
+    property int wakeKey: -1
 
     implicitWidth: {
         const w = centerWidth * 0.8;
@@ -34,6 +36,19 @@ StyledRect {
         if (root.lock.unlocking)
             return;
 
+        // The key that ends the screensaver only wakes the screen. In the password it would start an empty attempt or
+        // add a character nobody sees, and a few of those can trip pam_faillock and lock the account
+        if (root.lock.lock.screensaverActive) {
+            root.lock.lock.screensaverActive = false;
+            root.wakeKey = event.key;
+            event.accepted = true;
+            return;
+        }
+        if (event.key === root.wakeKey) {
+            event.accepted = true;
+            return;
+        }
+
         // The arrow and modifier keys play the game in the notification dock, the rest go to the password
         if (root.lock.runnerGame?.handleKey(event, true)) {
             event.accepted = true;
@@ -46,6 +61,11 @@ StyledRect {
         root.lock.pam.handleKey(event);
     }
     Keys.onReleased: event => {
+        if (event.key === root.wakeKey && !event.isAutoRepeat) {
+            root.wakeKey = -1;
+            event.accepted = true;
+            return;
+        }
         if (root.lock.runnerGame?.handleKey(event, false))
             event.accepted = true;
     }

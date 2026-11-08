@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Full ecosystem sandbox</title>
+<style>
+  body { margin: 0; padding: 22px 28px; background: #14161c; color: #e6e8ee; font: 15px/1.5 system-ui, sans-serif; }
+  h2 { margin: 0 0 4px; font-size: 22px; }
+  .subtitle { color: #9aa0b0; margin: 0 0 14px; max-width: 900px; font-size: 14px; }
+  .row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  canvas { display: block; border-radius: 12px; border: 2px solid #2a2e3a; }
+  #cv { width: 640px; height: 360px; image-rendering: pixelated; }
+  #ch { width: 640px; height: 90px; margin-top: 8px; background: #1d2029; }
+  .panel { background: #1d2029; border: 2px solid #2a2e3a; border-radius: 12px; padding: 12px 14px; width: 400px; }
+  .panel h3 { margin: 10px 0 4px; font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em; color: #9aa0b0; }
+  .panel h3:first-child { margin-top: 0; }
+  .cols { columns: 2; column-gap: 14px; }
+  label { display: block; margin: 3px 0; font-size: 13.5px; cursor: pointer; break-inside: avoid; }
+  .sl { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13.5px; }
+  .sl b { width: 90px; font-weight: 500; }
+  .sl input { flex: 1; }
+  .sl span { width: 34px; text-align: right; color: #9aa0b0; }
+  #stats { margin-top: 8px; font: 12.5px ui-monospace, monospace; color: #b9bfce; width: 640px; }
+  .bar { height: 12px; display: flex; border-radius: 6px; overflow: hidden; margin-top: 6px; width: 640px; }
+  #log { margin-top: 10px; font-size: 13px; color: #b9bfce; width: 640px; min-height: 120px; }
+  #log div { padding: 1px 0; border-bottom: 1px solid #23262f; }
+  #log i { color: #7d8397; font-style: normal; margin-right: 8px; }
+  button { background: #2a2e3a; color: #e6e8ee; border: 0; border-radius: 8px; padding: 6px 12px; cursor: pointer; margin: 8px 6px 0 0; }
+  .legend { margin-top: 8px; font-size: 12.5px; color: #9aa0b0; display: flex; gap: 14px; flex-wrap: wrap; width: 640px; }
+  .dot { display: inline-block; width: 9px; height: 9px; margin-right: 5px; }
+</style>
+</head>
+<body>
+<h2>Full ecosystem: six species, living land, system signals</h2>
+<p class="subtitle">Fast-forwarded prototype in the pixel style. Food sets every population: well-fed animals breed, hungry ones starve. Hover a rule for what it does. The chart shows the last few thousand steps; each line is scaled to its species' cap.</p>
+
+<div class="row">
+  <div>
+    <canvas id="cv" width="640" height="360"></canvas>
+    <canvas id="ch" width="640" height="90"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="bar" id="bar"></div>
+    <div id="stats"></div>
+    <div id="log"></div>
+  </div>
+  <div class="panel">
+    <div id="rules"></div>
+    <h3>System signals (stand-ins)</h3>
+    <div class="sl"><b>Rain</b><input type="range" id="rain" min="0" max="150" value="80"><span id="rainv">0.80</span></div>
+    <div class="sl"><b>Lightning</b><input type="range" id="light" min="0" max="100" value="25"><span id="lightv">0.25</span></div>
+    <div class="sl"><b>Springs</b><input type="range" id="springs" min="0" max="8" value="3"><span id="springsv">3</span></div>
+    <div class="sl"><b>Speed</b><input type="range" id="speed" min="1" max="30" value="8"><span id="speedv">8x</span></div>
+    <small style="color:#8b91a3">Rain = download traffic, lightning = ping timeouts, springs = Bluetooth devices nearby. Real wiring comes later.</small><br>
+    <button id="newworld">New world</button><button id="kill">Wipe out sheep</button><button id="killp">Wipe out predators</button>
+  </div>
+</div>
+
+<script>
+const W = 80, H = 45, C = 8, N = W * H;
+function hash(x, y, z) { let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+const sm = t => t * t * (3 - 2 * t), lerp = (a, b, t) => a + (b - a) * t;
+function vn(x, y, s) { const xi = Math.floor(x), yi = Math.floor(y), fx = sm(x - xi), fy = sm(y - yi); return lerp(lerp(hash(xi, yi, s), hash(xi + 1, yi, s), fx), lerp(hash(xi, yi + 1, s), hash(xi + 1, yi + 1, s), fx), fy); }
+const fbm = (x, y, s) => vn(x, y, s) * 0.6 + vn(x * 2.1, y * 2.1, s) * 0.28 + vn(x * 4.3, y * 4.3, s) * 0.12;
+
+// ---- rules and sliders -------------------------------------------------------------------------------------------
+const RULES = [
+  ['Land', [
+    ['overgraze', 'Overgrazing makes desert', 'Grass grazed bare turns to desert and loses fertility.'],
+    ['spread', 'Unattended land spreads', 'Untouched grass fills sand and grows into forest; forest creeps into meadow.'],
+    ['recover', 'Desert recovers', 'Rested desert near water and with some fertility turns back into grass.'],
+    ['browse', 'Herds thin forest', 'Sheep in forest slowly turn it into meadow.'],
+    ['dung', 'Dung and seeds', 'Sheep fertilise the soil and carry seeds to bare neighbours.'],
+    ['erosion', 'Erosion', 'Bare desert is worn down by rain; low spots flood into lakes.'],
+    ['tide', 'Drought and flood', 'Water level follows rain: lakes shrink in drought, shores flood in rain.'],
+    ['fire', 'Wildfire', 'Lightning ignites forest and lush grass; it burns, then regrows.'],
+  ]],
+  ['Life', [
+    ['pop', 'Food sets population', 'Fed animals breed, hungry ones starve. Off: nobody breeds or starves.'],
+    ['migrate', 'Herds migrate', 'Sheep on bare ground look further afield for grass.'],
+    ['fear', 'Fear of predators', 'Sheep avoid wolves, birds avoid hawks (trophic cascade).'],
+    ['cross', 'Cross-habitat hunting', 'Sharks take sheep wading in shallows, hungry wolves snatch fish at the shore, hawks sometimes dive for fish.'],
+    ['guano', 'Nutrient pump', 'Birds that catch fish drop guano on land: fertility, new growth on coasts.'],
+    ['evolve', 'Sheep adapt (hardiness)', 'Lambs inherit hardiness. Hardy sheep can live on desert scrub but graze less efficiently.'],
+  ]],
+  ['Keeper', [
+    ['respawn', 'Respawn extinct species', 'A species with no members arrives again from the map edge after a while.'],
+    ['providence', 'Mercy rains', 'When desert passes 55% of the land, monsoon rains start until it falls under 40%.'],
+    ['persist', 'Keep scars between visits', 'Fertility and terrain wear are saved in this browser and loaded next time.'],
+  ]],
+];
+const ids = [];
+document.getElementById('rules').innerHTML = RULES.map(([g, rs]) => `<h3>${g}</h3><div class="cols">` + rs.map(([id, t, d]) => { ids.push(id); return `<label title="${d}"><input type="checkbox" id="${id}" checked> ${t}</label>`; }).join('') + '</div>').join('');
+for (const id of ['rain', 'light', 'springs', 'speed']) ids.push(id);
+const ui = {}; for (const id of ids) ui[id] = document.getElementById(id);
+const F = {};
+function flags() { for (const id of ids) F[id] = ui[id].type === 'checkbox' ? ui[id].checked : +ui[id].value; }
+for (const id of ['rain', 'light', 'springs', 'speed']) ui[id].oninput = () => {
+  document.getElementById(id + 'v').textContent = id === 'speed' ? ui[id].value + 'x' : id === 'springs' ? ui[id].value : (ui[id].value / 100).toFixed(2);
+  flags(); if (id === 'springs') calcMoist();
+};
+document.querySelectorAll && document.querySelectorAll('input[type=checkbox]').forEach(el => el.onchange = flags);
+
+// ---- world state -------------------------------------------------------------------------------------------------
+// types: 0 deep, 1 shallow, 2 sand, 3 grass, 4 forest, 5 desert, 6 ash, 7 burning
+const type = new Uint8Array(N), elev = new Float32Array(N), bio = new Float32Array(N), fert = new Float32Array(N), age = new Int32Array(N),
+  rest = new Int32Array(N), stress = new Int32Array(N), burn = new Int32Array(N), moistW = new Float32Array(N), moist = new Float32Array(N), plank = new Float32Array(N), nut = new Float32Array(N);
+const count = new Int32Array(8);
+let tick = 0, seed = 0, level = 0.4, monsoon = false, desertPct = 0, springs = [];
+const idx = (x, y) => y * W + x;
+const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const DIRS = [...Array(8)].map((_, i) => [Math.cos(i * Math.PI / 4), Math.sin(i * Math.PI / 4)]);
+const T = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : type[(y | 0) * W + (x | 0)];
+
+const KIND = {
+  sheep: { ok: t => t >= 1 && t <= 6, speed: 0.14, cap: 200, start: 24, arrive: 6, label: 'sheep', col: '#ffffff', hist: '#ffffff' },
+  fish:  { ok: t => t === 0 || t === 1, speed: 0.3, cap: 160, start: 40, arrive: 12, label: 'fish', col: '#9fe8ff', hist: '#9fe8ff' },
+  bird:  { ok: t => t >= 0, speed: 0.34, cap: 100, start: 18, arrive: 8, label: 'birds', col: '#d0b3ff', hist: '#d0b3ff' },
+  shark: { ok: t => t === 0 || t === 1, speed: 0.38, cap: 4, start: 2, arrive: 1, label: 'sharks', col: '#ff6b6b', hist: '#4aa3ff' },
+  wolf:  { ok: t => t >= 2 && t <= 6, speed: 0.26, cap: 4, start: 3, arrive: 1, label: 'wolves', col: '#ff3b3b', hist: '#ff5c5c' },
+  hawk:  { ok: t => t >= 0, speed: 0.44, cap: 4, start: 2, arrive: 1, label: 'hawks', col: '#ffc15c', hist: '#ffc15c' },
+};
+const KS = Object.keys(KIND);
+const pops = {}, ext = {}, gone = {};
+let hist = {};
+const logEl = document.getElementById('log'), logs = [], cdown = {};
+function log(msg, key, cool) {
+  key = key || msg; if (cdown[key] > tick) return; cdown[key] = tick + (cool || 0);
+  logs.unshift(`<div><i>day ${Math.floor(tick / 100)}</i>${msg}</div>`); if (logs.length > 8) logs.pop(); logEl.innerHTML = logs.join('');
+}
+
+function place(a, k) { for (let n = 0; n < 400; n++) { a.x = Math.random() * W; a.y = Math.random() * H; if (KIND[k].ok(T(a.x, a.y))) return true; } return false; }
+function mk(k, edge) {
+  const a = { k, x: 0, y: 0, vx: 0, vy: 0, e: 1, th: 0, h: 0.1, g: 0, dead: false };
+  if (edge) for (let n = 0; n < 200; n++) {
+    const s = Math.random() < 0.5;
+    a.x = s ? (Math.random() < 0.5 ? 0.5 : W - 0.5) : Math.random() * W; a.y = s ? Math.random() * H : (Math.random() < 0.5 ? 0.5 : H - 0.5);
+    if (KIND[k].ok(T(a.x, a.y))) return a;
+  }
+  return place(a, k) ? a : null;
+}
+function addN(k, n, edge) { for (let i = 0; i < n; i++) { const a = mk(k, edge); if (a) { if (k === 'sheep') a.h = F.evolve ? Math.random() * 0.2 : 0.1; pops[k].push(a); } } }
+
+const STORE = 'ecosystem-sandbox-v1';
+function save() { try { localStorage.setItem(STORE, JSON.stringify({ seed, fert: Array.from(fert, v => +v.toFixed(2)), elev: Array.from(elev, v => +v.toFixed(3)) })); } catch (e) {} }
+function load() { try { const s = JSON.parse(localStorage.getItem(STORE)); return s && s.fert && s.fert.length === N ? s : null; } catch (e) { return null; } }
+
+function calcMoist() {
+  for (let p = 0; p < N; p++) moist[p] = moistW[p];
+  const n = Math.min(F.springs, springs.length);
+  for (let s = 0; s < n; s++) for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const d = Math.hypot(i - springs[s].x, j - springs[s].y); if (d < 7) moist[idx(i, j)] = Math.max(moist[idx(i, j)], 1 - d / 7); }
+}
+function reset(fresh) {
+  flags();
+  if (fresh) try { localStorage.removeItem(STORE); } catch (e) {}
+  const saved = F.persist && !fresh ? load() : null;
+  seed = saved ? saved.seed : Math.floor(Math.random() * 1e6);
+  tick = 0; monsoon = false; level = 0.4; logs.length = 0; logEl.innerHTML = '';
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const p = idx(i, j), h = saved ? saved.elev[p] : (fbm(i * 0.07, j * 0.07, seed) - 0.2) * 1.6, m = fbm(i * 0.09 + 40, j * 0.09, seed + 1);
+    elev[p] = h; type[p] = h < 0.3 ? 0 : h < 0.4 ? 1 : h < 0.45 ? 2 : (m > 0.52 ? 4 : 3);
+    bio[p] = 0.7; fert[p] = saved ? saved.fert[p] : 0.6 + 0.4 * vn(i * 0.2, j * 0.2, seed + 2); age[p] = rest[p] = stress[p] = burn[p] = 0; plank[p] = 0.7; nut[p] = 0;
+  }
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    let d = 14;
+    for (let dy = -13; dy <= 13; dy++) for (let dx = -13; dx <= 13; dx++) { const x = i + dx, y = j + dy; if (x < 0 || y < 0 || x >= W || y >= H || type[idx(x, y)] > 1) continue; d = Math.min(d, Math.hypot(dx, dy)); }
+    moistW[idx(i, j)] = Math.max(0, 1 - d / 14);
+  }
+  springs = []; for (let n = 0; n < 8; n++) { const a = mk('wolf'); if (a) springs.push({ x: a.x, y: a.y }); }
+  calcMoist();
+  for (const k of KS) { pops[k] = []; ext[k] = 0; gone[k] = false; hist[k] = []; addN(k, KIND[k].start); }
+  hist.desert = [];
+  if (saved) log('Loaded saved scars from the last visit');
+}
+
+// ---- land --------------------------------------------------------------------------------------------------------
+function fireNear(x, y, r) { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const a = x + dx, b = y + dy; if (a >= 0 && b >= 0 && a < W && b < H && type[idx(a, b)] === 7) return [dx, dy]; } return null; }
+function rainNow() { return monsoon ? Math.max(F.rain / 100, 1.0) : F.rain / 100; }
+
+function cells(rain) {
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const p = idx(i, j), t = type[p];
+    if (t <= 1) {
+      plank[p] = Math.min(1, plank[p] + 0.0006 * (0.3 + nut[p] * 2 + (t ? 0.5 : 0))); nut[p] *= 0.9995;
+      if (t === 1 && F.tide && elev[p] > level + 0.008) { type[p] = 2; age[p] = 0; }
+      continue;
+    }
+    if (F.tide && elev[p] < level - 0.008) { type[p] = 1; plank[p] = 0.3; continue; }
+    const r = nb[(Math.random() * 4) | 0], a = i + r[0], b = j + r[1], q = (a >= 0 && b >= 0 && a < W && b < H) ? idx(a, b) : -1;
+    if (t === 3) {
+      // grass that stays bare for a while dies; one bite to the ground is not enough
+      if (bio[p] < 0.02) { if (++stress[p] > 60 && F.overgraze) { type[p] = 5; rest[p] = 0; stress[p] = 0; fert[p] = Math.max(0.1, fert[p] - 0.4); continue; } } else if (stress[p] > 0) stress[p]--;
+      bio[p] = Math.min(1, bio[p] + 0.0035 * rain * (0.2 + moist[p]) * (0.4 + fert[p]));
+      if (rain < 0.4) bio[p] -= 0.004 * (1 - moist[p]) * (0.4 - rain) / 0.4;
+      age[p]++; if (fert[p] < 1.2) fert[p] += 0.00005;
+      if (bio[p] < 0.001) bio[p] = 0.001;
+      if (F.spread && q >= 0 && bio[p] > 0.8 && age[p] > 150) {
+        if (type[q] === 4) { if (Math.random() < 0.0015) { type[p] = 4; age[p] = 0; } }
+        else if (type[q] === 2 && moist[q] > 0.3 && Math.random() < 0.02) { type[q] = 3; bio[q] = 0.3; age[q] = 0; }
+      }
+    } else if (t === 4) {
+      age[p]++; bio[p] = Math.min(1, bio[p] + 0.0007 * rain * (0.4 + fert[p]));
+      if (F.spread && q >= 0 && age[p] > 150 && type[q] === 3 && bio[q] > 0.6 && Math.random() < 0.002) { type[q] = 4; age[q] = 0; }
+    } else if (t === 5) {
+      rest[p]++; fert[p] = Math.min(0.5, fert[p] + 0.00003);
+      if (F.erosion) elev[p] -= 0.00002 * rain;
+      if (F.recover && rest[p] > 500 && moist[p] > 0.25 && rain > 0.3 && fert[p] > 0.2 && Math.random() < 0.01) { type[p] = 3; bio[p] = 0.15; age[p] = 0; }
+    } else if (t === 6) {
+      if (--burn[p] <= 0) { type[p] = 3; bio[p] = 0.1; age[p] = 0; }
+    } else if (t === 7) {
+      for (const [dx, dy] of nb) { const x = i + dx, y = j + dy; if (x < 0 || y < 0 || x >= W || y >= H) continue; const o = idx(x, y); if ((type[o] === 4 || (type[o] === 3 && bio[o] > 0.35)) && Math.random() < 0.12) { type[o] = 7; burn[o] = 6; } }
+      if (--burn[p] <= 0) { type[p] = 6; burn[p] = 150; }
+    } else if (t === 2 && F.spread && q >= 0 && type[q] === 3 && bio[q] > 0.9 && moist[p] > 0.4 && Math.random() < 0.0015) { type[p] = 3; bio[p] = 0.2; age[p] = 0; }
+  }
+  if (F.fire && Math.random() < F.light / 100 * 0.06) {
+    const x = (Math.random() * W) | 0, y = (Math.random() * H) | 0, p = idx(x, y);
+    if ((type[p] === 4 || (type[p] === 3 && bio[p] > 0.4)) && Math.random() < 0.5) { type[p] = 7; burn[p] = 6; log('Lightning sets the land on fire', 'fire', 400); }
+  }
+}
+
+// ---- animals -----------------------------------------------------------------------------------------------------
+const rnd = () => (Math.random() - 0.5) * 0.06;
+function find(a, radii, test) {
+  const o = (Math.random() * 8) | 0;
+  for (const r of radii) for (let k = 0; k < 8; k++) { const d = DIRS[(k + o) & 7]; if (test(a.x + d[0] * r, a.y + d[1] * r)) return d; }
+  return null;
+}
+function nearest(a, list, maxd, filter) {
+  let best = null, bd = maxd; for (const o of list) { if (o.dead || (filter && !filter(o))) continue; const d = Math.hypot(o.x - a.x, o.y - a.y); if (d < bd) { bd = d; best = o; } } return best ? [best, bd] : null;
+}
+function springAt(x, y) { const n = Math.min(F.springs, springs.length); for (let s = 0; s < n; s++) if (Math.hypot(x - springs[s].x, y - springs[s].y) < 1.6) return true; return false; }
+function move(a, dx, dy) {
+  const K = KIND[a.k]; a.vx = a.vx * 0.85 + dx; a.vy = a.vy * 0.85 + dy;
+  const sp = Math.hypot(a.vx, a.vy); if (sp > K.speed) { a.vx *= K.speed / sp; a.vy *= K.speed / sp; }
+  if (!K.ok(T(a.x, a.y))) { // stranded by a shore moving or a fire
+    for (let r = 1; r <= 3; r++) for (const d of DIRS) if (K.ok(T(a.x + d[0] * r, a.y + d[1] * r))) { a.x += d[0] * 0.4; a.y += d[1] * 0.4; return; }
+    if (!place(a, a.k)) a.dead = true; return;
+  }
+  const nx = a.x + a.vx, ny = a.y + a.vy;
+  if (K.ok(T(nx, ny))) { a.x = nx; a.y = ny; }
+  else if (K.ok(T(nx, a.y))) { a.x = nx; a.vy = -a.vy * 0.5; }
+  else if (K.ok(T(a.x, ny))) { a.y = ny; a.vx = -a.vx * 0.5; }
+  else { a.vx = -a.vx * 0.6; a.vy = -a.vy * 0.6; }
+}
+function flock(a, list, dx, dy) {
+  for (let n = 0; n < 5; n++) { const o = list[(Math.random() * list.length) | 0]; if (!o || o === a) continue; const ox = o.x - a.x, oy = o.y - a.y, d = Math.hypot(ox, oy) || 1; if (d < 14) { const s = d < 2 ? -0.02 : 0.004; dx += ox / d * s; dy += oy / d * s; } }
+  return [dx, dy];
+}
+function flee(a, list, range, w, dx, dy) { for (const o of list) { const ox = o.x - a.x, oy = o.y - a.y, d = Math.hypot(ox, oy); if (d < range && d > 0) { dx -= ox / d * w; dy -= oy / d * w; } } return [dx, dy]; }
+
+function animals() {
+  const { sheep, fish, bird, shark, wolf, hawk } = pops;
+  for (const s of sheep) {
+    const t = T(s.x, s.y), p = idx(s.x | 0, s.y | 0);
+    let dx = rnd(), dy = rnd(), d;
+    s.th += 0.0012; if (t === 1 || springAt(s.x, s.y)) s.th = 0;
+    if (s.th > 1 && (d = find(s, [3, 6, 10, 16, 24, 34], (x, y) => T(x, y) === 1 || springAt(x, y)))) { dx += d[0] * 0.06; dy += d[1] * 0.06; }
+    else if (t === 1 && (d = find(s, [2], (x, y) => T(x, y) >= 2))) { dx += d[0] * 0.15; dy += d[1] * 0.15; }
+    else if (s.e < 1 || bio[p] < 0.2) {
+      const radii = F.migrate ? [2, 5, 9, 16] : [2, 5, 9];
+      if ((d = find(s, radii, (x, y) => { const q = T(x, y) === 3 ? idx(x | 0, y | 0) : -1; return q >= 0 && bio[q] > 0.45; }))) { dx += d[0] * 0.05; dy += d[1] * 0.05; }
+    }
+    if (F.fear) [dx, dy] = flee(s, wolf, 7, 0.08, dx, dy);
+    const f = fireNear(s.x | 0, s.y | 0, 6); if (f) { const m = Math.hypot(f[0], f[1]) || 1; dx -= f[0] / m * 0.2; dy -= f[1] / m * 0.2; }
+    [dx, dy] = flock(s, sheep, dx, dy);
+    move(s, dx, dy);
+    const t2 = T(s.x, s.y), p2 = idx(s.x | 0, s.y | 0);
+    if (t2 === 3) { const eat = Math.min(bio[p2], 0.05); bio[p2] -= eat; s.e += eat * 0.8 * (1 - 0.6 * s.h); age[p2] = 0; }
+    else if (t2 === 4 && F.browse) { s.e += 0.004; age[p2] = 0; if (Math.random() < 0.0012) { type[p2] = 3; bio[p2] = 0.3; age[p2] = 0; } }
+    else if (t2 === 5) s.e += 0.010 * s.h;
+    else if (t2 === 7) s.dead = true;
+    if (F.dung && s.e > 1 && t2 >= 2 && t2 <= 5 && Math.random() < 0.02) {
+      fert[p2] = Math.min(1.5, fert[p2] + 0.05);
+      const r = nb[(Math.random() * 4) | 0], a = (s.x | 0) + r[0], b = (s.y | 0) + r[1];
+      if (a >= 0 && b >= 0 && a < W && b < H) { const q = idx(a, b); if ((type[q] === 2 || type[q] === 5) && moist[q] > 0.2 && Math.random() < 0.5) { type[q] = 3; bio[q] = 0.2; age[q] = 0; } }
+    }
+    s.e -= 0.008 + (s.th > 1.6 ? 0.004 : 0);
+  }
+  for (const f of fish) {
+    const p = idx(f.x | 0, f.y | 0); let dx = rnd(), dy = rnd(), d;
+    if (f.e < 1.2 && (d = find(f, [3, 6, 10], (x, y) => { const t = T(x, y); return t >= 0 && t <= 1 && plank[idx(x | 0, y | 0)] > 0.35; }))) { dx += d[0] * 0.05; dy += d[1] * 0.05; }
+    [dx, dy] = flee(f, shark, 8, 0.2, dx, dy); [dx, dy] = flock(f, fish, dx, dy);
+    move(f, dx, dy);
+    if (T(f.x, f.y) <= 1 && T(f.x, f.y) >= 0) { const q = idx(f.x | 0, f.y | 0), eat = Math.min(plank[q], 0.04); plank[q] -= eat; f.e += eat; }
+    f.e -= 0.006;
+  }
+  for (const b of bird) {
+    const t = T(b.x, b.y); let dx = rnd(), dy = rnd(), d;
+    if (b.e < 1.2 && (d = find(b, [3, 6, 10, 16], (x, y) => T(x, y) === 4 && bio[idx(x | 0, y | 0)] > 0.3))) { dx += d[0] * 0.05; dy += d[1] * 0.05; }
+    if (F.fear) [dx, dy] = flee(b, hawk, 8, 0.2, dx, dy);
+    [dx, dy] = flock(b, bird, dx, dy); move(b, dx, dy);
+    const t2 = T(b.x, b.y), p = idx(b.x | 0, b.y | 0);
+    if (t2 === 4) { const eat = Math.min(bio[p], 0.03); bio[p] -= eat; b.e += eat * 1.2; }
+    if (F.guano && b.e < 1 && t2 === 1) { const f = nearest(b, fish, 1.5); if (f && Math.random() < 0.05) { f[0].dead = true; b.e += 0.6; b.g = 1; } }
+    if (F.guano && b.g && t2 >= 2 && t2 <= 4) {
+      b.g = 0; fert[p] = Math.min(1.5, fert[p] + 0.3);
+      if (t2 === 2 && moist[p] > 0.3) { type[p] = 3; bio[p] = 0.2; age[p] = 0; } else if (t2 === 3 || t2 === 4) bio[p] = Math.min(1, bio[p] + 0.2);
+      log('Birds drop guano on the coast: new growth', 'guano', 600);
+    }
+    b.e -= 0.008;
+  }
+  for (const s of shark) {
+    let dx = rnd(), dy = rnd(), tg = null;
+    if (s.e < 1.4) tg = nearest(s, fish, 22) || (F.cross ? nearest(s, sheep, 22, o => T(o.x, o.y) === 1) : null);
+    if (tg) { dx += (tg[0].x - s.x) / tg[1] * 0.14; dy += (tg[0].y - s.y) / tg[1] * 0.14; if (tg[1] < 1.4) { tg[0].dead = true; s.e += tg[0].k === 'sheep' ? 1 : 0.5; if (tg[0].k === 'sheep') log('A shark takes a sheep wading in the shallows', 'shark', 300); } }
+    move(s, dx, dy); s.e -= 0.004;
+  }
+  for (const w of wolf) {
+    let dx = rnd(), dy = rnd(), tg = null;
+    if (w.e < 1.4) tg = nearest(w, sheep, 28);
+    if (!tg && F.cross && w.e < 0.8) tg = nearest(w, fish, 5, o => T(o.x, o.y) === 1);
+    if (tg) { dx += (tg[0].x - w.x) / tg[1] * 0.1; dy += (tg[0].y - w.y) / tg[1] * 0.1; if (tg[1] < 1.4) { tg[0].dead = true; w.e += tg[0].k === 'sheep' ? 1 : 0.5; if (tg[0].k === 'fish') log('A hungry wolf snatches a fish at the shore', 'wolf', 300); } }
+    move(w, dx, dy); w.e -= 0.004;
+  }
+  for (const h of hawk) {
+    let dx = rnd(), dy = rnd(), tg = null;
+    if (h.e < 1.4) tg = nearest(h, bird, 30);
+    if (tg) { dx += (tg[0].x - h.x) / tg[1] * 0.16; dy += (tg[0].y - h.y) / tg[1] * 0.16; if (tg[1] < 1.4) { tg[0].dead = true; h.e += 0.7; } }
+    if (F.cross && h.e < 1.2 && T(h.x, h.y) === 1) { const f = nearest(h, fish, 1.6); if (f && Math.random() < 0.04) { f[0].dead = true; h.e += 0.5; log('A hawk dives and takes a fish', 'hawk', 300); } }
+    move(h, dx, dy); h.e -= 0.004;
+  }
+}
+
+function lifecycle() {
+  for (const k of KS) {
+    const K = KIND[k], list = pops[k], born = [], breedE = K.cap > 10 ? 1.5 : 2;
+    for (let n = list.length - 1; n >= 0; n--) {
+      const a = list[n];
+      if (a.dead || (F.pop && a.e <= 0)) { list.splice(n, 1); continue; }
+      if (!F.pop) { a.e = Math.min(1.2, Math.max(a.e, 0.5)); continue; }
+      if (a.e > breedE && list.length + born.length < K.cap) {
+        a.e = K.cap > 10 ? 0.8 : 1;
+        const c = { k, x: a.x, y: a.y, vx: 0, vy: 0, e: a.e, th: 0, h: F.evolve ? Math.min(1, Math.max(0, a.h + (Math.random() - 0.5) * 0.12)) : 0.1, g: 0, dead: false };
+        born.push(c);
+      }
+    }
+    for (const c of born) list.push(c);
+    if (list.length === 0) {
+      if (!gone[k]) { gone[k] = true; log(`The ${K.label} have gone extinct`, 'x' + k, 0); }
+      if (F.respawn && ++ext[k] > 300) { addN(k, K.arrive, true); ext[k] = 0; gone[k] = false; log(`${K.arrive} ${K.label} arrive from the edge of the map`, 'r' + k, 0); }
+    } else { ext[k] = 0; gone[k] = false; }
+  }
+}
+
+function census() {
+  count.fill(0); for (let p = 0; p < N; p++) count[type[p]]++;
+  const land = count[2] + count[3] + count[4] + count[5] + count[6] + count[7]; desertPct = land ? count[5] / land : 0;
+  return land;
+}
+function step() {
+  tick++;
+  const rain = rainNow(); level = 0.4 + 0.03 * (rain - 0.8) / 0.8;
+  cells(rain); animals(); lifecycle();
+  if (tick % 50 === 0) {
+    census();
+    if (F.providence && !monsoon && desertPct > 0.55) { monsoon = true; log('Desert passes 55%: mercy rains begin', 'mon', 0); }
+    else if (monsoon && (desertPct < 0.4 || !F.providence)) { monsoon = false; log('The mercy rains end', 'mon', 0); }
+    if (desertPct > 0.3) log('Desert now covers a third of the land', 'd30', 1500);
+  }
+  if (tick % 20 === 0) { for (const k of KS) { hist[k].push(pops[k].length); if (hist[k].length > 320) hist[k].shift(); } hist.desert.push(desertPct); if (hist.desert.length > 320) hist.desert.shift(); }
+  if (F.persist && tick % 600 === 0) save();
+}
+
+// ---- drawing -----------------------------------------------------------------------------------------------------
+const COL = ['#1d4e89', '#2f7fc1', '#e3d39a', null, '#2e7a3d', null, '#3a3330', '#ff7a2a'];
+const g = document.getElementById('cv').getContext('2d'), gc = document.getElementById('ch').getContext('2d');
+const grassCol = b => `rgb(${Math.round(190 - b * 80)},180,80)`;
+const desertCol = f => { const k = Math.min(1, f / 0.5); return `rgb(${Math.round(150 + k * 51)},${Math.round(90 + k * 53)},${Math.round(44 + k * 30)})`; };
+document.getElementById('legend').innerHTML = KS.map(k => `<span><i class="dot" style="background:${KIND[k].hist}"></i>${KIND[k].label}</span>`).join('') + '<span><i class="dot" style="background:#c98f4a"></i>desert share</span>';
+function draw() {
+  const land = census();
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const p = idx(i, j), t = type[p]; g.fillStyle = t === 3 ? grassCol(bio[p]) : t === 5 ? desertCol(fert[p]) : COL[t]; g.fillRect(i * C, j * C, C, C); }
+  const n = Math.min(F.springs, springs.length);
+  for (let s = 0; s < n; s++) { g.fillStyle = '#7fe7ff'; g.fillRect(Math.round(springs[s].x * C - 3), Math.round(springs[s].y * C - 3), 7, 7); g.fillStyle = '#fff'; g.fillRect(Math.round(springs[s].x * C - 1), Math.round(springs[s].y * C - 1), 3, 3); }
+  for (const f of pops.fish) { g.fillStyle = KIND.fish.col; g.fillRect(Math.round(f.x * C - 1), Math.round(f.y * C - 1), 3, 3); }
+  for (const s of pops.sheep) { g.fillStyle = `rgb(255,${Math.round(255 - s.h * 90)},${Math.round(255 - s.h * 170)})`; g.fillRect(Math.round(s.x * C - 2), Math.round(s.y * C - 2), 5, 5); }
+  for (const b of pops.bird) { g.fillStyle = KIND.bird.col; g.fillRect(Math.round(b.x * C - 1), Math.round(b.y * C - 1), 3, 3); }
+  for (const k of ['shark', 'wolf', 'hawk']) for (const a of pops[k]) { g.fillStyle = KIND[k].col; g.fillRect(Math.round(a.x * C - 3), Math.round(a.y * C - 3), 7, 7); }
+  const pct = c => Math.round(c / land * 100), sh = pops.sheep.length ? pops.sheep.reduce((s, a) => s + a.h, 0) / pops.sheep.length : 0;
+  document.getElementById('stats').textContent = `grass ${pct(count[3])}% forest ${pct(count[4])}% desert ${pct(count[5])}% ash ${pct(count[6] + count[7])}%  |  ` + KS.map(k => `${KIND[k].label} ${pops[k].length}`).join(' ') + `  |  hardiness ${sh.toFixed(2)}  rain ${rainNow().toFixed(2)}${monsoon ? ' (monsoon)' : ''}  day ${Math.floor(tick / 100)}`;
+  document.getElementById('bar').innerHTML = [[count[3], '#6fb45a'], [count[4], '#2e7a3d'], [count[5], '#c98f4a'], [count[6] + count[7], '#6b4a3a'], [count[2], '#e3d39a']].map(([c, col]) => `<div style="width:${c / land * 100}%;background:${col}"></div>`).join('');
+  gc.fillStyle = '#1d2029'; gc.fillRect(0, 0, 640, 90);
+  const line = (arr, col, cap) => { gc.strokeStyle = col; gc.beginPath(); arr.forEach((v, i) => { const x = i * 2, y = 86 - Math.min(1, v / cap) * 80; i ? gc.lineTo(x, y) : gc.moveTo(x, y); }); gc.stroke(); };
+  for (const k of KS) line(hist[k], KIND[k].hist, KIND[k].cap);
+  line(hist.desert, '#c98f4a', 1);
+}
+document.getElementById('newworld').onclick = () => reset(true);
+document.getElementById('kill').onclick = () => { pops.sheep.length = 0; };
+document.getElementById('killp').onclick = () => { for (const k of ['shark', 'wolf', 'hawk']) pops[k].length = 0; };
+reset();
+setInterval(() => { flags(); for (let n = 0; n < F.speed; n++) step(); draw(); }, 66);
+</script>
+</body>
+</html>

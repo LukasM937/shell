@@ -4,7 +4,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Caelestia.Config
 import qs.components.misc
+import qs.modules.lock
 
 Scope {
     property alias lock: lock
@@ -15,8 +17,15 @@ Scope {
         // For the game in the empty notification dock, kept between locks
         property int runnerBest
         property int runnerCharacter
+        // Whether the ecosystem covers the lock screen. Set by the idle chain, the screensaver IPC target and the preview
+        property bool screensaverActive
 
         signal unlock
+
+        onLockedChanged: {
+            if (!locked)
+                screensaverActive = false;
+        }
 
         LockSurface {
             lock: lock
@@ -28,6 +37,21 @@ Scope {
         id: pam
 
         lock: lock
+    }
+
+    Binding {
+        target: EcoWorld
+        property: "running"
+        value: lock.screensaverActive
+    }
+
+    Connections {
+        function onPreviewRequested(): void {
+            lock.locked = true;
+            lock.screensaverActive = true;
+        }
+
+        target: EcoWorld
     }
 
     Loader {
@@ -74,5 +98,25 @@ Scope {
         }
 
         target: "lock"
+    }
+
+    IpcHandler {
+        function start(): bool {
+            if (!GlobalConfig.lock.screensaver.enabled)
+                return false;
+            lock.locked = true;
+            lock.screensaverActive = true;
+            return true;
+        }
+
+        function stop(): void {
+            lock.screensaverActive = false;
+        }
+
+        function isActive(): bool {
+            return lock.screensaverActive;
+        }
+
+        target: "screensaver"
     }
 }

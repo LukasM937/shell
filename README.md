@@ -241,7 +241,7 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
 > - `dashboard`: `mediaUpdateInterval`, `resourceUpdateInterval`
 > - `general`: `apps.*`, `battery.*`, `idle.*`, `logo`
 > - `launcher`: `actionPrefix`, `actions`, `enableDangerousActions`, `favouriteApps`, `hiddenApps`, `specialPrefix`, `useFuzzy.*`, `vimKeybinds`
-> - `lock`: `enableFprint`, `enableHowdy`, `maxFprintTries`, `maxHowdyTries`, `triggerHowdyOnWake`
+> - `lock`: `enableFprint`, `enableHowdy`, `maxFprintTries`, `maxHowdyTries`, `screensaver.*`, `triggerHowdyOnWake`
 > - `nexus`: `networkRescanInterval`
 > - `notifs`: `actionOnClick`, `defaultExpireTimeout`, `expire`, `fullscreen`, `fullscreenExpireTimeout`
 > - `paths`: `lyricsDir`, `wallpaperDir`
@@ -439,24 +439,13 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
             "lockBeforeSleep": true,
             "inhibitWhenAudio": true,
             "inhibitWhenCharging": false,
-            "timeouts": [
-                {
-                    "timeout": 180,
-                    "idleAction": "lock",
-                    "inhibitWhenAudio": false,
-                    "inhibitWhenCharging": false,
-                    "respectInhibitors": true
-                },
-                {
-                    "timeout": 300,
-                    "idleAction": "dpms off",
-                    "returnAction": "dpms on"
-                },
-                {
-                    "timeout": 600,
-                    "idleAction": ["suspendThenHibernate"]
-                }
-            ]
+            "lockAfter": 10,
+            "screensaverAfter": 2,
+            "displayOffAfter": 60,
+            "sleepWhenDisplayOff": true,
+            "busyCpuPercent": 25,
+            "busyNetworkKBs": 500,
+            "timeouts": []
         },
         "battery": {
             "warnLevels": [
@@ -818,7 +807,18 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
         "maxHowdyTries": 3,
         "triggerHowdyOnWake": true,
         "hideNotifs": false,
-        "enableSessionControls": true
+        "enableSessionControls": true,
+        "screensaver": {
+            "enabled": true,
+            "speed": 1,
+            "eventLog": true,
+            "wifi": true,
+            "bluetooth": true,
+            "ping": true,
+            "pingHost": "1.1.1.1",
+            "neighbours": false,
+            "heat": true
+        }
     },
     "nexus": {
         "wallpapersPerRow": 4,
@@ -954,6 +954,12 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
 ```
 
 </details>
+
+> [!NOTE]
+> The idle chain in `general.idle` (`lockAfter`, `screensaverAfter`, `displayOffAfter`, `sleepWhenDisplayOff`) now
+> locks the session, shows the screensaver, turns the display off and suspends, so the default `timeouts` list is empty.
+> Entries you still have in `timeouts` run alongside the chain, and their own `dpms off` and suspend ignore its busy
+> checks. The chain suspends with plain `suspend`, where the old default timeout used `suspendThenHibernate`.
 
 ### Advanced configuration
 

@@ -19,6 +19,8 @@ python3 scripts/trs-check.py              # translation helper misuse
 qmlformat <file.qml> | diff -u <file.qml> -   # no output means formatted
 clang-format --dry-run --Werror <file>    # C++ only, needs clang-format 20+
 node scripts/runner-check.js              # lock screen game: no map may be unwinnable, run after touching modules/lock/runner.js
+node scripts/ecosystem-check.js           # lock screen ecosystem: no invalid values, land survives, run after touching modules/lock/ecosystem.js
+node scripts/idlechain-check.js           # idle chain: lock, screensaver, display off and sleep times, run after touching daemons/idlechain.js
 ```
 
 `qmlformat` without a Qt install: `python3 -m venv v && v/bin/pip install PySide6-Essentials`, then use
