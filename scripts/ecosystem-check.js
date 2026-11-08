@@ -4,10 +4,12 @@
 // It runs worlds for tens of thousands of steps and fails when a value turns invalid, when a world has no water or no
 // land, when the land dies out under constant lightning or stays a desert, or when a signal does not do what it says.
 //
-//   node scripts/ecosystem-check.js [--salt 0] [--src path/to/ecosystem.js]
+//   node scripts/ecosystem-check.js [--salt 0] [--src path/to/ecosystem.js] [--only name]
 //
 // --salt moves every random seed (the world seeds and the generator behind them), so a different run catches checks
-// that only pass for a lucky seed.
+// that only pass for a lucky seed. --only runs just the checks whose name contains the text, as the whole run is slow.
+//
+// It also covers modules/lock/ecosignals.js, which turns system readings into the inputs of a world.
 
 const fs = require("fs");
 const path = require("path");
@@ -20,6 +22,8 @@ const salt = +(args.salt ?? 0);
 const source = fs.readFileSync(args.src ?? path.join(__dirname, "../modules/lock/ecosystem.js"), "utf8").replace(/^\.pragma library$/m, "");
 // Wrapped in a function that takes Math as an argument: globals of a vm context are slow to reach, and without this the
 // check takes minutes and reports a step cost several times what the shell sees
+const signalSource = fs.readFileSync(path.join(__dirname, "../modules/lock/ecosignals.js"), "utf8").replace(/^\.pragma library$/m, "");
+const S = vm.runInNewContext(`(function (Math) {\n${signalSource}\nreturn { rain, lightning, springCount, islands, groves, hashString, seedFor, worldKey, smooth, pruneWorlds };\n})`)(Math);
 const E = vm.runInNewContext(`(function (Math) {\n${source}\nreturn { T, SPECIES, create, setSignals, step, snapshot, census, drainEvents };\n})`)(Math);
 
 function mulberry32(a) {
@@ -33,6 +37,8 @@ function mulberry32(a) {
 
 let failures = 0;
 function check(name, fn) {
+    if (args.only && !name.includes(args.only))
+        return;
     try {
         const info = fn();
         console.log(`PASS ${name}${info ? ` (${info})` : ""}`);
@@ -647,6 +653,191 @@ check("step is cheap", () => {
     const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 3000;
     assert(ms < 5, `${ms.toFixed(3)} ms per step`);
     return `${ms.toFixed(3)} ms per step`;
+});
+
+// --- Signal mapping (modules/lock/ecosignals.js) ---
+
+// Every function reads a system value that may be missing, so each of these counts as "no reading"
+const NO_READING = [undefined, null, NaN, "text", {}, [], true];
+
+check("signals: rain follows traffic and heat", () => {
+    const cases = [[0, 40, 0.8], [50000, 40, 0.8], [1e7, 40, 1.5], [1e9, 40, 1.5], [0, 70, 0.8], [0, 85, 0.2], [0, 100, 0.2], [0, 77.5, 0.5], [1e7, 85, 0.9]];
+    for (const [down, temp, want] of cases)
+        assert(near(S.rain(down, temp), want), `rain(${down}, ${temp}) is ${S.rain(down, temp)}, not ${want}`);
+    let prev = S.rain(50000, 40);
+    for (let d = 100000; d <= 1e7; d *= 2) {
+        const r = S.rain(d, 40);
+        assert(r > prev, `rain did not rise from ${prev} at ${d} B/s`);
+        prev = r;
+    }
+    const mid = S.rain(Math.sqrt(50000 * 1e7), 40);
+    assert(near(mid, 1.15), `rain is not logarithmic, the geometric middle gives ${mid}`);
+    for (const t of [-40, 20, 70, 80, 150])
+        assert(S.rain(0, t) >= 0.1 && S.rain(1e7, t) <= 1.5, `rain left [0.1, 1.5] at ${t} C`);
+});
+
+check("signals: rain without a reading is the baseline", () => {
+    for (const bad of NO_READING) {
+        assert(near(S.rain(bad, 40), 0.8), `rain(${bad}, 40) is ${S.rain(bad, 40)}`);
+        assert(near(S.rain(0, bad), 0.8), `rain(0, ${bad}) is ${S.rain(0, bad)}`);
+    }
+    assert(near(S.rain(NaN, undefined), 0.8), "rain(NaN, undefined) is not 0.8");
+    assert(near(S.rain(), 0.8), "rain() is not 0.8");
+    assert(near(S.rain(-5, 40), 0.8), "a negative download is not the baseline");
+    assert(near(S.rain(Infinity, 40), 1.5), "an infinite download is not the maximum");
+});
+
+check("signals: lightning counts failed pings", () => {
+    const ping = (n, failed) => Array.from({ length: n }, (_, i) => i >= failed);
+    assert(near(S.lightning([]), 0.05), "an empty list is not 0.05");
+    assert(near(S.lightning(ping(10, 10)), 0.55), "ten failures are not 0.55");
+    assert(near(S.lightning(ping(10, 5)), 0.3), "five of ten are not 0.3");
+    assert(near(S.lightning(ping(10, 0)), 0.05), "no failures are not 0.05");
+    assert(near(S.lightning(ping(4, 2)), 0.3), "two of four are not 0.3");
+    // Twenty entries: only the last ten count, so the old failures do not
+    assert(near(S.lightning([...ping(10, 10), ...ping(10, 0)]), 0.05), "old failures counted");
+    assert(near(S.lightning([...ping(10, 0), ...ping(10, 10)]), 0.55), "recent failures missed");
+    assert(near(S.lightning([...ping(15, 0), ...ping(5, 5)]), 0.05 + 0.5 * 0.5), "the last ten were not counted from the end");
+});
+
+check("signals: lightning without a reading is the baseline", () => {
+    for (const bad of NO_READING.filter(v => !Array.isArray(v)))
+        assert(near(S.lightning(bad), 0.05), `lightning(${bad}) is ${S.lightning(bad)}`);
+    assert(near(S.lightning([null, undefined, NaN]), 0.05), "entries that are not booleans counted as failures");
+    assert(near(S.lightning([false, undefined, true, false]), 0.05 + 0.5 * 2 / 3), "entries without a reading were not skipped");
+});
+
+check("signals: springCount", () => {
+    const cases = [[12, 8], [8, 8], [5, 5], [0, 0], [-3, 0], [2.9, 2], [Infinity, 8]];
+    for (const [n, want] of cases)
+        assert(S.springCount(n) === want, `springCount(${n}) is ${S.springCount(n)}, not ${want}`);
+    for (const bad of NO_READING)
+        assert(S.springCount(bad) === 0, `springCount(${bad}) is ${S.springCount(bad)}`);
+    assert(S.springCount() === 0, "springCount() is not 0");
+});
+
+check("signals: islands", () => {
+    const aps = Array.from({ length: 20 }, (_, i) => ({ bssid: `aa:bb:cc:dd:ee:${i.toString(16).padStart(2, "0")}`, strength: i * 5 }));
+    const out = S.islands([{ strength: 90 }, { bssid: "", strength: 90 }, { bssid: null, strength: 90 }, ...aps]);
+    assert(out.length === 12, `${out.length} islands from 20 access points`);
+    assert(near(out[0].height, 0.12 + 0.18 * 0.95) && near(out[11].height, 0.12 + 0.18 * 0.4), "the strongest 12 were not kept in order");
+    for (const o of out)
+        assert(o.x >= 0 && o.x < 1 && o.y >= 0 && o.y < 1 && near(o.radius, 0.08) && Number.isFinite(o.height), `bad island ${JSON.stringify(o)}`);
+    assert(S.islands([{ bssid: "x", strength: 90 }])[0].height > S.islands([{ bssid: "x", strength: 20 }])[0].height, "a stronger signal is not taller");
+    assert(near(S.islands([{ bssid: "x", strength: 100 }])[0].height, 0.3) && near(S.islands([{ bssid: "x", strength: 0 }])[0].height, 0.12), "height range is wrong");
+    const a = S.islands([{ bssid: "x", strength: 50 }])[0], b = S.islands([{ bssid: "x", strength: 50 }])[0];
+    assert(a.x === b.x && a.y === b.y, "the same bssid moved");
+    const other = S.islands([{ bssid: "y", strength: 50 }])[0];
+    assert(other.x !== a.x || other.y !== a.y, "two bssids share a position");
+    assert(near(S.islands([{ bssid: "x", strength: 400 }])[0].height, 0.3), "a strength over 100 is not clamped");
+});
+
+check("signals: islands without a reading", () => {
+    for (const bad of NO_READING)
+        assert(S.islands(bad).length === 0, `islands(${bad}) is not empty`);
+    assert(S.islands().length === 0, "islands() is not empty");
+    const out = S.islands([null, undefined, 5, "aa", { bssid: 5 }, { bssid: "x", strength: NaN }, { bssid: "y" }]);
+    assert(out.length === 2 && out.every(o => near(o.height, 0.12)), `entries without a reading gave ${JSON.stringify(out)}`);
+});
+
+check("signals: island and grove positions use independent draws", () => {
+    // If x and y came from the same hash, they would lie on a line
+    const pts = S.groves(Array.from({ length: 24 }, (_, i) => `02:00:00:00:00:${i.toString(16).padStart(2, "0")}`));
+    const n = pts.length, mx = pts.reduce((s, p) => s + p.x, 0) / n, my = pts.reduce((s, p) => s + p.y, 0) / n;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (const p of pts) {
+        sxy += (p.x - mx) * (p.y - my);
+        sxx += (p.x - mx) ** 2;
+        syy += (p.y - my) ** 2;
+    }
+    const r = sxy / Math.sqrt(sxx * syy);
+    assert(Math.abs(r) < 0.5, `x and y correlate (r = ${r.toFixed(2)})`);
+    assert(pts.every(p => p.x !== p.y), "x equals y");
+    const spread = (v) => Math.max(...v) - Math.min(...v);
+    assert(spread(pts.map(p => p.x)) > 0.5 && spread(pts.map(p => p.y)) > 0.5, "positions are bunched up");
+});
+
+check("signals: groves", () => {
+    assert(S.groves(["a", "a", "b"]).length === 2, "duplicates were not removed");
+    assert(S.groves(["AA:BB", "aa:bb"]).length === 1, "the case of a mac made a second grove");
+    const many = Array.from({ length: 40 }, (_, i) => `m${i}`);
+    const out = S.groves(many);
+    assert(out.length === 24, `${out.length} groves from 40 macs`);
+    assert(out.every(g => g.x >= 0 && g.x < 1 && g.y >= 0 && g.y < 1), "a grove is outside [0, 1)");
+    assert(JSON.stringify(S.groves(many)) === JSON.stringify(out), "groves are not repeatable");
+    assert(JSON.stringify(S.groves(["b", "a"])) === JSON.stringify(S.groves(["a", "b"]).reverse()), "a position depends on the order");
+});
+
+check("signals: groves without a reading", () => {
+    for (const bad of NO_READING)
+        assert(S.groves(bad).length === 0, `groves(${bad}) is not empty`);
+    assert(S.groves().length === 0, "groves() is not empty");
+    assert(S.groves([null, undefined, 5, "", "a"]).length === 1, "entries without a reading were not skipped");
+});
+
+check("signals: hashString and seeds", () => {
+    assert(S.hashString("home") === S.hashString("home"), "hashString is not repeatable");
+    assert(S.hashString("home") !== S.hashString("hom3"), "hashString ignores a character");
+    for (const s of ["", "a", "home", "ünï", "x".repeat(500)]) {
+        const h = S.hashString(s);
+        assert(Number.isInteger(h) && h >= 0 && h <= 0xffffffff, `hashString(${s.slice(0, 8)}) is ${h}`);
+    }
+    for (const bad of NO_READING.filter(v => typeof v !== "string"))
+        assert(S.hashString(bad) === S.hashString(""), `hashString(${bad}) is not the hash of the empty string`);
+    assert(S.seedFor("") === S.seedFor(undefined), "an empty ssid and none differ");
+    assert(S.seedFor(null) === S.seedFor("none") && S.seedFor(NaN) === S.seedFor("none"), "no ssid is not the none seed");
+    assert(S.seedFor("home") === S.hashString("home") && S.seedFor("home") !== S.seedFor("work"), "seedFor does not follow the ssid");
+    // Random-looking: a few hundred names should not collide or sit in one half of the range
+    const hs = Array.from({ length: 500 }, (_, i) => S.hashString(`net${i}`));
+    assert(new Set(hs).size === 500, "hash collisions among 500 names");
+    const high = hs.filter(h => h >= 2 ** 31).length;
+    assert(high > 200 && high < 300, `${high} of 500 hashes in the upper half`);
+});
+
+check("signals: worldKey", () => {
+    const k = S.worldKey("home");
+    assert(/^[0-9a-f]{8}$/.test(k), `worldKey is ${k}`);
+    assert(!k.includes("home"), "the key contains the name");
+    assert(k === S.worldKey("home") && k !== S.worldKey("work"), "worldKey does not follow the ssid");
+    assert(parseInt(k, 16) === S.seedFor("home"), "worldKey is not the hex of the seed");
+    for (const bad of NO_READING.filter(v => typeof v !== "string").concat(""))
+        assert(/^[0-9a-f]{8}$/.test(S.worldKey(bad)) && S.worldKey(bad) === S.worldKey(undefined), `worldKey(${bad}) is ${S.worldKey(bad)}`);
+    // Low hashes still give 8 characters
+    for (let i = 0; i < 2000; i++)
+        assert(S.worldKey(`n${i}`).length === 8, `worldKey of n${i} is ${S.worldKey(`n${i}`)}`);
+});
+
+check("signals: smooth", () => {
+    assert(S.smooth(undefined, 5) === 5, "smooth(undefined, 5) is not 5");
+    for (const bad of NO_READING.filter(v => typeof v !== "number" || isNaN(v)))
+        assert(S.smooth(bad, 5) === 5, `smooth(${bad}, 5) is ${S.smooth(bad, 5)}`);
+    assert(S.smooth(Infinity, 5) === 5, "an infinite previous value was kept");
+    assert(near(S.smooth(10, 0), 8), "smooth(10, 0) is not 8");
+    assert(near(S.smooth(10, 0, 0.5), 5) && near(S.smooth(10, 0, 1), 0) && near(S.smooth(10, 0, 0), 10), "alpha is not applied");
+    assert(near(S.smooth(10, 0, undefined), 8) && near(S.smooth(10, 0, NaN), 8), "a missing alpha is not 0.2");
+    assert(near(S.smooth(10, undefined), 10) && near(S.smooth(10, NaN), 10), "a missing reading moved the value");
+    assert(!Number.isFinite(S.smooth(undefined, undefined)), "no value at all gave a number");
+});
+
+check("signals: pruneWorlds", () => {
+    const worlds = {};
+    for (let i = 0; i < 7; i++)
+        worlds["w" + i] = { last: 100 + (i * 3) % 7, name: "w" + i };
+    const before = JSON.stringify(worlds);
+    const kept = S.pruneWorlds(worlds);
+    const keys = Object.keys(kept).sort();
+    const newest = Object.keys(worlds).sort((a, b) => worlds[b].last - worlds[a].last).slice(0, 5).sort();
+    assert(keys.length === 5 && JSON.stringify(keys) === JSON.stringify(newest), `kept ${keys} instead of ${newest}`);
+    assert(kept.w0 === worlds.w0 || !kept.w0, "a kept world was copied");
+    assert(JSON.stringify(worlds) === before && kept !== worlds, "the argument was changed");
+    assert(Object.keys(S.pruneWorlds(worlds, 2)).length === 2, "max 2 kept another count");
+    assert(Object.keys(S.pruneWorlds(worlds, 0)).length === 0, "max 0 kept a world");
+    assert(Object.keys(S.pruneWorlds({ a: { last: 1 }, b: { last: 2 } })).length === 2, "fewer than max were dropped");
+    assert(Object.keys(S.pruneWorlds(worlds, NaN)).length === 5 && Object.keys(S.pruneWorlds(worlds, undefined)).length === 5, "a missing max is not 5");
+    const odd = S.pruneWorlds({ a: { last: 5 }, b: null, c: { last: NaN }, d: { last: 9 } }, 2);
+    assert(Object.keys(odd).sort().join() === "a,d", `entries without a time outranked real ones: ${Object.keys(odd)}`);
+    for (const bad of NO_READING)
+        assert(Object.keys(S.pruneWorlds(bad)).length === 0, `pruneWorlds(${bad}) is not empty`);
 });
 
 process.exit(failures ? 1 : 0);
