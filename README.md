@@ -955,6 +955,12 @@ For example, to automatically hide the bar on the monitor named `DP-1`:
 
 </details>
 
+> [!NOTE]
+> The idle chain in `general.idle` (`lockAfter`, `screensaverAfter`, `displayOffAfter`, `sleepWhenDisplayOff`) now
+> locks the session, shows the screensaver, turns the display off and suspends, so the default `timeouts` list is empty.
+> Entries you still have in `timeouts` run alongside the chain, and their own `dpms off` and suspend ignore its busy
+> checks. The chain suspends with plain `suspend`, where the old default timeout used `suspendThenHibernate`.
+
 ### Advanced configuration
 
 > [!CAUTION]

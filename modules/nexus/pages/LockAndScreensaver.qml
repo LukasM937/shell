@@ -108,7 +108,7 @@ PageBase {
         StepperRow {
             label: Tr.tr("Busy CPU threshold")
             // TRANSLATORS: CPU is a hardware abbreviation, leave it untranslated
-            subtext: Tr.tr("Average CPU use over five minutes that holds the chain back (%)")
+            subtext: Tr.tr("Average CPU use over five minutes that holds sleep back (%)")
             value: GlobalConfig.general.idle.busyCpuPercent
             from: 1
             to: 100
@@ -119,7 +119,7 @@ PageBase {
         StepperRow {
             label: Tr.tr("Busy network threshold")
             // TRANSLATORS: KB/s is the kilobytes per second unit, leave it untranslated
-            subtext: Tr.tr("Average traffic over five minutes that holds the chain back (KB/s)")
+            subtext: Tr.tr("Average traffic over five minutes that holds sleep back (KB/s)")
             value: GlobalConfig.general.idle.busyNetworkKBs
             from: 1
             to: 100000

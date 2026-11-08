@@ -36,7 +36,8 @@ Singleton {
     }
 
     function reset(): void {
-        const k = world ? key : Mapping.worldKey(EcoSignals.inputs.ssid);
+        // A stopped world stays for the fade out and may be another network's, so only a running one is the current one
+        const k = running ? key : Mapping.worldKey(EcoSignals.inputs.ssid);
         const next = Object.assign({}, saved);
         delete next[k];
         saved = next;

@@ -184,7 +184,8 @@ Item {
             if (root.world.tick === root.painted)
                 return;
             root.painted = root.world.tick;
-            // Moves the event line a few pixels a minute, so no pixel stays lit for hours
+            // Slides the event line across the screen once every five minutes (about 7 px/s on a 1920 px screen), so no
+            // pixel stays lit for hours
             root.drift = (Date.now() % 300000) / 300000;
             canvas.requestPaint();
         }

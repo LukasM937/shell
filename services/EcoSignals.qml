@@ -10,11 +10,12 @@ import Caelestia.Services
 import qs.services
 
 // Readings from the system for the lock screen ecosystem (modules/lock/EcoWorld.qml), and whether the computer is busy
-// for the idle chain. A source that is switched off, missing or failing gives the idle baseline, never zero.
+// for the idle chain. A source that is switched off, missing or failing gives the idle baseline, never zero, except the
+// springs: no devices means no springs.
 Singleton {
     id: root
 
-    // Whether the last five minutes were busy, so the idle chain holds the screensaver back during a long build or download.
+    // Whether the last five minutes were busy, so the idle chain holds sleep back during a long build or download.
     // Cpu.percentage is a fraction, the traffic is bytes per second and a KB here is 1000 bytes
     readonly property bool busy: cpuAverage * 100 >= GlobalConfig.general.idle.busyCpuPercent || netAverage / 1000 >= GlobalConfig.general.idle.busyNetworkKBs
     // Set by EcoWorld while the screensaver runs. The pings and the neighbour list only run then, so nothing goes out
