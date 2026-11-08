@@ -57,10 +57,6 @@ Item {
         return out;
     }
 
-    function level(v: real): int {
-        return Math.max(0, Math.min(levels - 1, Math.round(v * (levels - 1))));
-    }
-
     function fillRun(ctx: var, code: int, row: int, from: int, to: int): void {
         ctx.fillStyle = colours[code];
         ctx.fillRect(from * cell, row * cell, (to - from) * cell, cell);
@@ -86,17 +82,28 @@ Item {
         const type = w.type;
         const bio = w.bio;
         const fert = w.fert;
+        const cols = w.cols;
+        // Read once: this loop runs for every cell, 15 times a second
+        const maxLevel = levels - 1;
+        const grassBase = grass;
+        const desertBase = desert;
+        const berryCode = berries;
 
         // Every cell is drawn, so there is nothing to clear
         for (let j = 0; j < w.rows; j++) {
             let start = 0;
             let code = -1;
-            for (let i = 0; i <= w.cols; i++) {
+            for (let i = 0; i <= cols; i++) {
                 let next = -1;
-                if (i < w.cols) {
-                    const p = j * w.cols + i;
+                if (i < cols) {
+                    const p = j * cols + i;
                     const t = type[p];
-                    next = t === 3 ? grass + level(bio[p]) : t === 5 ? desert + level(fert[p] / 0.5) : t === 4 && bio[p] > 0.4 ? berries : t;
+                    if (t === 3)
+                        next = grassBase + Math.max(0, Math.min(maxLevel, Math.round(bio[p] * maxLevel)));
+                    else if (t === 5)
+                        next = desertBase + Math.max(0, Math.min(maxLevel, Math.round(fert[p] * 2 * maxLevel)));
+                    else
+                        next = t === 4 && bio[p] > 0.4 ? berryCode : t;
                 }
                 if (next !== code) {
                     if (code >= 0)
@@ -171,7 +178,7 @@ Item {
     // step and paint only then
     Timer {
         interval: 33
-        running: root.visible && root.eco.running && !!root.world
+        running: root.visible && root.eco.running && !!root.world && !StayActive.screenAsleep
         repeat: true
         onTriggered: {
             if (root.world.tick === root.painted)

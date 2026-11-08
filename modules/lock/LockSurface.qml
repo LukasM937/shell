@@ -194,7 +194,7 @@ WlSessionLockSurface {
 
         Visual {
             source: Wallpapers.current
-            playing: PersistentState.wallpaperPlaying
+            playing: PersistentState.wallpaperPlaying && !root.saver
         }
     }
 
@@ -275,6 +275,15 @@ WlSessionLockSurface {
             Anim {
                 type: Anim.StandardSmall
             }
+        }
+
+        // opacity 0 on lockLayer does not stop pointer events, so without this a click on the ecosystem would reach the
+        // hidden power buttons. Hidden items get no events, so it only works while the screensaver shows, fade-out included
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.AllButtons
+            hoverEnabled: true
+            onWheel: e => e.accepted = true
         }
     }
 }
