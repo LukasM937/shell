@@ -41,7 +41,7 @@ Scope {
 
     Binding {
         target: EcoWorld
-        property: "running"
+        property: "screensaver"
         value: lock.screensaverActive
     }
 

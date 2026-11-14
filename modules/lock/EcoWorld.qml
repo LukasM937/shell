@@ -13,10 +13,13 @@ import qs.utils
 // Owns the lock screen ecosystem: creates the world when the screensaver starts, steps it, feeds it EcoSignals and keeps
 // its soil and terrain in $XDG_STATE_HOME/caelestia/screensaver-worlds.json, one entry per network. A singleton so the
 // settings page can reset or preview it. The world stays after a stop, still and unchanged, so the screen can fade out.
+// The lock screen's screensaver and the desktop wallpaper (services/LiveWallpaper.qml) both want it; it runs while either does.
 Singleton {
     id: root
 
-    property bool running
+    property bool screensaver
+    property bool wallpaper
+    readonly property bool running: screensaver || wallpaper
     property var world: null
     // Only the last few, since the lock screen shows one line and a long session must not grow the list
     property var events: []
@@ -185,10 +188,11 @@ Singleton {
         }
     }
 
+    // The pings and the neighbour list only run for the screensaver; a wallpaper that is up all day sends nothing
     Binding {
         target: EcoSignals
         property: "active"
-        value: root.running
+        value: root.screensaver
     }
 
     // About 15 per second, the speed at which the prototype was balanced

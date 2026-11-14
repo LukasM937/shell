@@ -112,6 +112,8 @@ PageBase {
             }
         }
 
+        LiveWallpaperSettings {}
+
         ToggleRow {
             first: true
             text: Tr.tr("Display wallpaper")

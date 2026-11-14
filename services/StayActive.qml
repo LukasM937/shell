@@ -19,6 +19,9 @@ Singleton {
     // Set by the idle timeouts while they have the screen asleep. A TV may then go to standby for lack of signal, which
     // isn't the user turning it off, so the computer may still sleep
     property bool screenAsleep
+    // hl.dsp.dpms made Hyprland 0.57.0 vanish a second later on the NVIDIA-driven HDMI output (2026-11-12, no crash
+    // report). Set this once a newer Hyprland is known to survive it
+    readonly property bool dpmsSafe: false
 
     function enable(): void {
         if (!props.enabled)
@@ -41,6 +44,8 @@ Singleton {
     }
 
     function setDpms(on: bool): void {
+        if (!dpmsSafe)
+            return;
         Hypr.dispatch(Hypr.usingLua ? `hl.dsp.dpms({ action = "${on ? "enable" : "disable"}" })` : `dpms ${on ? "on" : "off"}`);
     }
 

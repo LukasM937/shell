@@ -179,6 +179,9 @@ To set the wallpaper, you can type `>wallpaper` in the launcher to open the wall
 Alternatively, you can also use `caelestia wallpaper -f <path_to_wallpaper>` to set the wallpaper directly.
 Use `caelestia wallpaper -h` for more info about this command.
 
+A wallpaper can also be alive: a village that grows with what the computer does, or the ecosystem of the screensaver. Both
+are listed in the wallpaper switcher, see [live wallpapers](docs/live-wallpaper.md).
+
 ## Updating
 
 ### Packaged install (AUR)

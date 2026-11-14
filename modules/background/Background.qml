@@ -7,6 +7,7 @@ import Caelestia.Config
 import qs.components
 import qs.components.containers
 import qs.services
+import qs.modules.live
 
 Variants {
     model: Screens.screens.filter(s => GlobalConfig.forScreen(s.name).background.enabled)
@@ -83,7 +84,19 @@ Variants {
                 anchors.fill: parent
                 active: Config.background.wallpaperEnabled
 
-                sourceComponent: Wallpaper {}
+                sourceComponent: LiveWallpaper.active ? liveWallpaper : stillWallpaper
+            }
+
+            Component {
+                id: stillWallpaper
+
+                Wallpaper {}
+            }
+
+            Component {
+                id: liveWallpaper
+
+                LiveBackground {}
             }
 
             Visualiser {
