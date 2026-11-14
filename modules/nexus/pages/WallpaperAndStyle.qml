@@ -141,5 +141,7 @@ PageBase {
         DesktopClockSettings {}
 
         DepthClockSettings {}
+
+        LiveWallpaperSettings {}
     }
 }
