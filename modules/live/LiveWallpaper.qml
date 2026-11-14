@@ -196,7 +196,8 @@ Singleton {
     }
 
     // Turns the pixels into a PNG with Pillow, which the CLI needs anyway, through a temporary file so a reader never sees half
-    // of it. The zoom is 2: the world is a tile map of 8 pixel tiles, and a still is a wallpaper
+    // of it. The system's Python is tried first, since a conda one earlier in PATH has no Pillow. The zoom is 2: the world is a
+    // tile map of 8 pixel tiles, and a still is a wallpaper
     Process {
         id: writer
 
@@ -205,7 +206,7 @@ Singleton {
         property int width
         property int height
 
-        command: ["sh", "-c", `set -e; mkdir -p "$(dirname "$4")"; base64 -d | python3 -c 'import sys;from PIL import Image;w,h,z=int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3]);im=Image.frombytes("RGBA",(w,h),sys.stdin.buffer.read());im.resize((w*z,h*z),Image.NEAREST).convert("RGB").save(sys.argv[4])' "$1" "$2" "$3" "$4.tmp.png"; mv "$4.tmp.png" "$4"`, "sh", `${width}`, `${height}`, "2", target]
+        command: ["sh", "-c", `set -e; py=/usr/bin/python3; [ -x "$py" ] || py=python3; mkdir -p "$(dirname "$4")"; base64 -d | "$py" -c 'import sys;from PIL import Image;w,h,z=int(sys.argv[1]),int(sys.argv[2]),int(sys.argv[3]);im=Image.frombytes("RGBA",(w,h),sys.stdin.buffer.read());im.resize((w*z,h*z),Image.NEAREST).convert("RGB").save(sys.argv[4])' "$1" "$2" "$3" "$4.tmp.png"; mv "$4.tmp.png" "$4"`, "sh", `${width}`, `${height}`, "2", target]
         stdinEnabled: true
         onStarted: {
             write(payload);

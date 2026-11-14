@@ -21,7 +21,11 @@ clang-format --dry-run --Werror <file>    # C++ only, needs clang-format 20+
 node scripts/runner-check.js              # lock screen game: no map may be unwinnable, run after touching modules/lock/runner.js
 node scripts/ecosystem-check.js           # lock screen ecosystem: no invalid values, land survives, run after touching modules/lock/ecosystem.js
 node scripts/idlechain-check.js           # idle chain: lock, screensaver, display off and sleep times, run after touching daemons/idlechain.js
+node scripts/village-check.js             # village wallpaper: sound villages, growth, saves, art, run after touching modules/live/*.js
 ```
+
+`node scripts/village-render.js scene out.png --age 30 --hour 19` draws the village into a PNG, `sheet` the pixel art; look at
+the result after touching modules/live/vart.js or vdraw.js, the check cannot tell a pretty house from an ugly one.
 
 `qmlformat` without a Qt install: `python3 -m venv v && v/bin/pip install PySide6-Essentials`, then use
 `v/lib/python*/site-packages/PySide6/qmlformat`. Version 6.12 matches the repo's formatting exactly.
