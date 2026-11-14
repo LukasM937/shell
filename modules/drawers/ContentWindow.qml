@@ -347,7 +347,15 @@ StyledWindow {
         required property Item panel
         property real deformAmount: 0.15
 
+        // Every blob draws a quad as big as itself plus the smoothing on all sides, and the shader lets each quad draw the pixels
+        // of the blend zone. Where a quad overlaps the anti-aliased edge of the border, that edge is drawn once more by it,
+        // which leaves a lighter half pixel line along the border over each closed drawer (a notification list over the top
+        // right, the dashboard over the top middle, a pop out over the bar). A drawer that is hidden under the border has
+        // nothing to add, the border's own quad draws the join with it, so it is not drawn until it comes into the open.
+        readonly property bool shown: x < root.width - root.borderThickness - 1 && x + width > bar.implicitWidth + 1 && y < root.height - root.borderThickness - 1 && y + height > root.borderThickness + 1
+
         group: blobGroup
+        visible: shown
         x: panel.x + bar.implicitWidth
         y: panel.y + root.borderThickness
         implicitWidth: panel.width
