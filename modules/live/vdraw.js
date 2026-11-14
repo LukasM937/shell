@@ -607,6 +607,10 @@ function drawDynamic(ctx, w, lib, env, t, covers) {
     // the fire at the heart of the village
     drawFire(ctx, w.centre.x * TILE + 4, w.centre.y * TILE + 6, t, env.night);
     drawSails(ctx, w, lib, t, env);
+    drawPiles(ctx, w, lib, env);
+    drawBoats(ctx, w, lib, env, t);
+    drawCarts(ctx, w, lib, env, t);
+    drawAnimals(ctx, w, env, t, covers);
     var order = w.people.slice().sort(function (a, b) {
         return a.y - b.y;
     });
@@ -618,7 +622,11 @@ function drawDynamic(ctx, w, lib, env, t, covers) {
             continue;
         drawPerson(ctx, w, p, t);
     }
+    drawForge(ctx, w, lib, env, t);
     drawSmoke(ctx, w, lib, env, t);
+    drawSky(ctx, w, env, t);
+    drawMusic(ctx, w, lib, env, t);
+    drawPigeons(ctx, w, env);
 }
 
 // Whether a point is hidden behind something taller than itself that stands in front of it
@@ -638,7 +646,7 @@ function drawWeather(ctx, w, env, t) {
     var W = w.cols * TILE, H = w.rows * TILE;
     var i;
     if (env.precip > 0) {
-        var n = Math.round(60 + 260 * env.precip);
+        var n = Math.round(90 + 420 * env.precip);
         if (env.snowing) {
             ctx.fillStyle = "rgba(255,255,255,0.85)";
             for (i = 0; i < n; i++) {
@@ -649,7 +657,7 @@ function drawWeather(ctx, w, env, t) {
                     ctx.fillRect(Math.round(sx) + 1, Math.round(sy), 1, 1);
             }
         } else {
-            ctx.fillStyle = "rgba(190,215,255,0.55)";
+            ctx.fillStyle = "rgba(200,222,255,0.7)";
             var slant = 2 + (env.wind || 0.3) * 6;
             for (i = 0; i < n; i++) {
                 var rx = (A.hash(i, 4, 4) * W + t * slant * 12) % W;
@@ -677,19 +685,32 @@ function drawWeather(ctx, w, env, t) {
     }
 }
 
-// The colour laid over everything for the hour: warm at the edges of the day, deep blue at night. Returns [r, g, b, a]
+// The colour laid over everything for the hour: warm at the edges of the day, deep blue at night, and a grey in bad weather.
+// Returns [r, g, b, a]
 function ambient(env) {
     var d = env.daylight;
-    if (d >= 0.97)
-        return [255, 255, 255, 0];
-    // dawn and dusk lean orange, then blue as the light goes
-    var warm = Math.max(0, 1 - Math.abs(d - 0.5) * 2.4);
-    var night = 1 - d;
-    var r = 255 * warm + 18 * (1 - warm), g = 150 * warm + 30 * (1 - warm), b = 90 * warm + 80 * (1 - warm);
-    var alpha = Math.min(0.62, night * 0.7 + warm * 0.08);
-    if (env.clouds > 0.6)
-        alpha = Math.min(0.66, alpha + 0.06 * env.clouds);
-    return [Math.round(r), Math.round(g), Math.round(b), alpha];
+    if (d === undefined)
+        d = 1;
+    var r = 255, g = 255, b = 255, a = 0;
+    if (d < 0.97) {
+        // dawn and dusk lean orange, then blue as the light goes
+        var warm = Math.max(0, 1 - Math.abs(d - 0.5) * 2.4);
+        var night = 1 - d;
+        r = 255 * warm + 18 * (1 - warm);
+        g = 150 * warm + 30 * (1 - warm);
+        b = 90 * warm + 80 * (1 - warm);
+        a = Math.min(0.62, night * 0.7 + warm * 0.08);
+    }
+    // a grey over a day that is not clear
+    var wa = env.thunder ? 0.26 : env.fog ? 0.1 : env.precip > 0.5 ? 0.17 : env.precip > 0 ? 0.1 : env.clouds > 0.6 ? 0.07 : 0;
+    if (wa > 0) {
+        var total = a + wa;
+        r = (r * a + 44 * wa) / total;
+        g = (g * a + 54 * wa) / total;
+        b = (b * a + 72 * wa) / total;
+        a = Math.min(0.7, 1 - (1 - a) * (1 - wa));
+    }
+    return [Math.round(r), Math.round(g), Math.round(b), a];
 }
 
 // Lit windows, the fire, lamps: drawn after the dark layer so they glow
@@ -733,4 +754,372 @@ function drawLights(ctx, w, lib, env, t) {
     var fx = w.centre.x * TILE + 4, fy = w.centre.y * TILE + 4;
     ctx.fillRect(fx - 20, fy - 12, 41, 25);
     ctx.fillRect(fx - 13, fy - 17, 27, 35);
+}
+
+// ---- animals --------------------------------------------------------------------------------------------------------------
+
+function openTile(w, x, y) {
+    if (x < 0 || y < 0 || x >= w.cols || y >= w.rows)
+        return false;
+    var i = y * w.cols + x;
+    var t = w.terrain[i];
+    return w.occ[i] === 0 && t !== 0 && t !== 1 && t !== 4;
+}
+
+// A smooth roaming about an anchor, as a function of time, so animals need no state of their own. It stays put where the
+// ground is not open. Returns [x, y, facing] in pixels
+function roam(w, ax, ay, rx, ry, seed, t) {
+    var a = t * 0.11 + seed * 2.3, b = t * 0.09 + seed * 1.7;
+    var x = ax + (Math.sin(a) + 0.5 * Math.sin(t * 0.27 + seed * 1.1)) * rx / 1.5;
+    var y = ay + (Math.cos(b) + 0.5 * Math.sin(t * 0.21 + seed)) * ry / 1.5;
+    if (!openTile(w, Math.floor(x), Math.floor(y))) {
+        x = ax;
+        y = ay;
+    }
+    return [Math.round(x * TILE), Math.round(y * TILE), Math.cos(a) >= 0 ? 1 : -1];
+}
+
+function drawSheep(ctx, x, y, f) {
+    ctx.fillStyle = "rgba(20,30,10,0.25)";
+    ctx.fillRect(x - 3, y - 1, 6, 1);
+    ctx.fillStyle = "#f0eee8";
+    ctx.fillRect(x - 3, y - 4, 5, 3);
+    ctx.fillStyle = "#cfcbc2";
+    ctx.fillRect(x - 3, y - 2, 5, 1);
+    ctx.fillStyle = "#4a4038";
+    ctx.fillRect(f > 0 ? x + 2 : x - 4, y - 4, 2, 2);
+    ctx.fillRect(x - 2, y - 1, 1, 1);
+    ctx.fillRect(x + 1, y - 1, 1, 1);
+}
+
+function drawChicken(ctx, x, y, f, peck) {
+    ctx.fillStyle = "#f4f0e4";
+    ctx.fillRect(x - 1, y - 3, 3, 2);
+    ctx.fillStyle = "#d9553f";
+    ctx.fillRect(f > 0 ? x + 2 : x - 2, y - 4 + peck, 1, 1);
+    ctx.fillStyle = "#e8a030";
+    ctx.fillRect(x, y - 1, 1, 1);
+}
+
+function drawDog(ctx, x, y, f) {
+    ctx.fillStyle = "#8a5a38";
+    ctx.fillRect(x - 2, y - 3, 4, 2);
+    ctx.fillRect(f > 0 ? x + 2 : x - 3, y - 4, 2, 2);
+    ctx.fillRect(f > 0 ? x - 3 : x + 2, y - 4, 1, 1);
+    ctx.fillStyle = "#5a3a22";
+    ctx.fillRect(x - 2, y - 1, 1, 1);
+    ctx.fillRect(x + 1, y - 1, 1, 1);
+}
+
+function drawAnimals(ctx, w, env, t, covers) {
+    if (env.night && env.daylight < 0.1)
+        return;
+    var i, k, b;
+    var renown = w.stats.renown;
+    var kept = 0;
+    for (i = 0; i < w.buildings.length; i++) {
+        b = w.buildings[i];
+        if (b.progress < 1)
+            continue;
+        if (b.type === "barn") {
+            var sheep = 2 + Math.min(3, Math.floor(renown / 200));
+            for (k = 0; k < sheep; k++) {
+                var s = roam(w, b.x + b.fw / 2, b.y + b.fh + 1.4, 4, 1.6, b.id + k * 3.1, t);
+                drawSheep(ctx, s[0], s[1], s[2]);
+            }
+        } else if ((b.type === "house" || b.type === "hut" || b.type === "farmhouse" || b.type === "longhouse") && kept < 9 && (b.id + b.v) % 2 === 0) {
+            kept++;
+            var c = roam(w, b.x + b.fw / 2 + 1, b.y + b.fh + 0.6, 2.2, 0.8, b.id * 1.3, t);
+            drawChicken(ctx, c[0], c[1], c[2], Math.floor(t * 2 + b.id) % 3 === 0 ? 1 : 0);
+        }
+    }
+    var dogs = Math.min(4, Math.floor(w.people.length / 14));
+    for (i = 0; i < dogs; i++) {
+        var d = roam(w, w.centre.x + (i - 1) * 3, w.centre.y + 2, 8, 3, 11 + i * 5.7, t);
+        if (!covered(covers, d[0], d[1]))
+            drawDog(ctx, d[0], d[1], d[2]);
+    }
+}
+
+// ---- boats, carts and the traffic of the network --------------------------------------------------------------------------
+
+function drawBoats(ctx, w, lib, env, t) {
+    var net = w.sig.net || 0;
+    for (var i = 0; i < w.buildings.length; i++) {
+        var b = w.buildings[i];
+        if (b.type !== "dock" || b.progress < 1 || !b.sail || env.daylight < 0.15)
+            continue;
+        var r = b.sail;
+        // the fisher's boat: out, about, and back, over a hundred seconds
+        var phase = (t + b.id * 7) % 100;
+        var u = phase < 8 ? phase / 8 : phase < 70 ? 1 : phase < 78 ? 1 - (phase - 70) / 8 : 0;
+        if (u > 0) {
+            var dist = 1.5 + (r.len - 2) * 0.8 * u;
+            var bob = Math.round(Math.sin(t * 1.2 + b.id));
+            var bx = (r.x + r.dx * dist) * TILE + 4 - 8, by = (r.y + r.dy * dist) * TILE + 2 + bob;
+            if (r.dx < 0)
+                A.blitFlipped(ctx, lib.prop.boat, bx, by);
+            else
+                A.blit(ctx, lib.prop.boat, bx, by);
+        }
+        // a trading ship comes the more the network is used
+        if (net > 0.12 && r.len >= 6) {
+            var period = 260 - 200 * net;
+            var q = ((t + b.id * 31) % period) / period;
+            var v = q < 0.3 ? q / 0.3 : q < 0.6 ? 1 : q < 0.9 ? 1 - (q - 0.6) / 0.3 : 0;
+            if (v > 0) {
+                var far = r.len + 2;
+                var d2 = far - (far - 3) * v;
+                var sx = (r.x + r.dx * d2) * TILE + 4, sy = (r.y + r.dy * d2) * TILE + 4;
+                drawShip(ctx, sx, sy, Math.round(Math.sin(t * 0.9 + b.id)), r.dx < 0);
+            }
+        }
+    }
+}
+
+function drawShip(ctx, x, y, bob, flip) {
+    var f = flip ? -1 : 1;
+    ctx.fillStyle = "#5a3b22";
+    ctx.fillRect(x - 9, y + bob, 18, 3);
+    ctx.fillStyle = "#7a5230";
+    ctx.fillRect(x - 8 + (flip ? 0 : 0), y + bob - 1, 16, 1);
+    ctx.fillStyle = "#3a2a1a";
+    ctx.fillRect(x - 6, y + bob + 3, 12, 1);
+    ctx.fillStyle = "#6b4a2c";
+    ctx.fillRect(x, y + bob - 12, 1, 12);
+    ctx.fillStyle = "#efe6d2";
+    ctx.fillRect(x + 1, y + bob - 11, 5 * f > 0 ? 5 : 5, 7);
+    ctx.fillRect(x - 5, y + bob - 9, 4, 5);
+    ctx.fillStyle = "#c0453a";
+    ctx.fillRect(x, y + bob - 14, 3, 2);
+}
+
+function drawCarts(ctx, w, lib, env, t) {
+    var net = w.sig.net || 0;
+    var route = w.route;
+    if (net < 0.18 || !route || route.length < 6 || env.night)
+        return;
+    var count = 1 + Math.floor(net * 3);
+    for (var i = 0; i < count; i++) {
+        var phase = (t * 0.012 * (0.6 + net) + i / count) % 1;
+        var u = phase < 0.5 ? phase * 2 : 2 - phase * 2;
+        var k = Math.min(route.length - 1, Math.floor(u * (route.length - 1)));
+        var p = route[k];
+        var x = p.x * TILE + 4 - 8, y = (p.y + 1) * TILE - 11;
+        if (phase < 0.5)
+            A.blit(ctx, lib.prop.cart, x, y);
+        else
+            A.blitFlipped(ctx, lib.prop.cart, x, y);
+    }
+}
+
+// ---- the sky: gulls, butterflies, fireflies, thunder -----------------------------------------------------------------------
+
+function drawSky(ctx, w, env, t) {
+    var i;
+    var W = w.cols * TILE, H = w.rows * TILE;
+    var storm = env.precip > 0.5;
+    if (env.daylight > 0.3 && !storm && w.seaCentre && w.seaCentre.y > 0) {
+        ctx.fillStyle = "#f4f6f8";
+        for (i = 0; i < 4; i++) {
+            var gx = w.seaCentre.x * TILE + Math.cos(t * 0.07 + i * 1.9) * W * 0.22;
+            var gy = w.seaCentre.y * TILE + Math.sin(t * 0.05 + i * 1.3) * H * 0.1;
+            var flap = Math.floor(t * 5 + i) % 2;
+            ctx.fillRect(Math.round(gx) - 2, Math.round(gy) - 1 + flap, 2, 1);
+            ctx.fillRect(Math.round(gx) + 1, Math.round(gy) - 1 + flap, 2, 1);
+            ctx.fillRect(Math.round(gx), Math.round(gy), 1, 1);
+        }
+    }
+    if ((env.season === "spring" || env.season === "summer") && env.daylight > 0.6 && env.precip === 0 && (env.wind || 0) < 0.7) {
+        var cols = ["#f4d03a", "#f08ab0", "#fafafa", "#8ac0f0"];
+        for (i = 0; i < 7; i++) {
+            var bx = w.centre.x * TILE + Math.sin(t * 0.17 + i * 2.7) * 90 + Math.sin(t * 0.7 + i) * 6;
+            var by = w.centre.y * TILE + Math.cos(t * 0.13 + i * 1.9) * 50 + Math.cos(t * 0.9 + i) * 4;
+            var open = Math.floor(t * 6 + i) % 2;
+            ctx.fillStyle = cols[i % cols.length];
+            ctx.fillRect(Math.round(bx), Math.round(by), open ? 3 : 1, 1);
+        }
+    }
+    if ((env.season === "summer" || env.season === "autumn") && env.daylight < 0.25 && env.precip === 0) {
+        for (i = 0; i < 18; i++) {
+            var glow = Math.sin(t * 1.6 + i * 3.1);
+            if (glow < 0.15)
+                continue;
+            var fx = w.centre.x * TILE + (A.hash(i, 3, 3) - 0.5) * W * 0.8 + Math.sin(t * 0.3 + i) * 5;
+            var fy = w.centre.y * TILE + (A.hash(i, 4, 4) - 0.5) * H * 0.7 + Math.cos(t * 0.27 + i) * 4;
+            ctx.fillStyle = "rgba(220,255,120," + glow.toFixed(2) + ")";
+            ctx.fillRect(Math.round(fx), Math.round(fy), 1, 1);
+            ctx.fillStyle = "rgba(220,255,120," + (glow * 0.25).toFixed(2) + ")";
+            ctx.fillRect(Math.round(fx) - 1, Math.round(fy) - 1, 3, 3);
+        }
+    }
+    if (env.thunder) {
+        // a flash and sometimes a bolt, a few times a minute
+        var slot = Math.floor(t * 2.5);
+        var frac = t * 2.5 - slot;
+        if (A.hash(slot, 77, 7) < 0.14 && frac < 0.3) {
+            ctx.fillStyle = "rgba(235,240,255," + (0.4 * (1 - frac / 0.3)).toFixed(2) + ")";
+            ctx.fillRect(0, 0, W, H);
+            if (frac < 0.18) {
+                ctx.fillStyle = "#ffffff";
+                var x = Math.round(A.hash(slot, 78, 7) * W);
+                for (var y = 0; y < H * 0.55; y += 5) {
+                    ctx.fillRect(x, y, 2, 5);
+                    x += Math.round((A.hash(slot, y, 79) - 0.5) * 8);
+                }
+            }
+        }
+    }
+}
+
+// ---- storehouse yards, the forge, the mage's tower and music ----------------------------------------------------------------
+
+// What is in store lies about the storehouses: logs, cut stone, hay, and crates for the memory in use
+function drawPiles(ctx, w, lib, env) {
+    var st = w.stock;
+    var pop = w.people.length;
+    var logs = Math.min(3, Math.floor(st.wood / 60));
+    var stones = Math.min(3, Math.floor(st.stone / 50));
+    var hay = Math.min(2, Math.floor(st.food / (pop * 1.2 + 1)));
+    var crates = Math.round((w.sig.mem || 0) * 5);
+    var seen = 0;
+    for (var i = 0; i < w.buildings.length; i++) {
+        var b = w.buildings[i];
+        if (b.type !== "storehouse" || b.progress < 1)
+            continue;
+        var base = (b.y + b.fh) * TILE - 1;
+        var left = b.x * TILE - 2, right = (b.x + b.fw) * TILE + 2;
+        var k;
+        // the first storehouse takes the wood and the crates, the next ones the stone and the hay
+        if (seen % 2 === 0) {
+            for (k = 0; k < logs; k++)
+                A.blit(ctx, lib.prop.logs, left - 10 - k * 4, base - 6 - (k % 2) * 3);
+            for (k = 0; k < crates; k++)
+                A.blit(ctx, lib.prop.crate, right + 1 + (k % 3) * 7, base - 6 - Math.floor(k / 3) * 6);
+        } else {
+            for (k = 0; k < stones; k++)
+                A.blit(ctx, lib.prop.stones, left - 10 - k * 4, base - 6 - (k % 2) * 3);
+            for (k = 0; k < hay; k++)
+                A.blit(ctx, lib.prop.hay, right + 1 + k * 9, base - 7);
+        }
+        seen++;
+    }
+}
+
+// The forge glows while the smith works, and throws sparks the harder the processor works
+function drawForge(ctx, w, lib, env, t) {
+    var cpu = w.sig.cpu || 0;
+    for (var i = 0; i < w.buildings.length; i++) {
+        var b = w.buildings[i];
+        if (b.progress < 1)
+            continue;
+        if (b.type === "smithy" && b.busy > 0) {
+            var pl = placeBuilding(w, b, lib);
+            var fx = pl.x + 4, fy = pl.y + pl.spr.h - 6;
+            ctx.fillStyle = "rgba(255,120,40," + (0.5 + 0.3 * Math.sin(t * 9)).toFixed(2) + ")";
+            ctx.fillRect(fx, fy, 3, 3);
+            if (cpu > 0.1) {
+                var n = 2 + Math.floor(cpu * 5);
+                for (var k = 0; k < n; k++) {
+                    var life = (t * 2.2 + k * 0.37 + b.id) % 1;
+                    ctx.fillStyle = life < 0.5 ? "#ffd060" : "#ff8a30";
+                    ctx.fillRect(Math.round(fx + 1 + (A.hash(k, Math.floor(t * 2.2 + b.id), 5) - 0.5) * 14 * life), Math.round(fy - life * 9 + life * life * 12), 1, 1);
+                }
+            }
+        }
+        if (b.type === "magetower") {
+            var gpu = w.sig.gpu || 0;
+            if (gpu > 0.2) {
+                var pm = placeBuilding(w, b, lib);
+                var spr = pm.spr;
+                var cx = pm.x + (spr.crystal ? spr.crystal.x : 9), cy = pm.y + (spr.crystal ? spr.crystal.y : 6);
+                // arcs of light jump from the crystal, more of them and longer the harder the graphics card works
+                var slot = Math.floor(t * 7);
+                var arcs = 1 + Math.floor(gpu * 4);
+                for (var a = 0; a < arcs; a++) {
+                    var ang = A.hash(slot, a, 12) * Math.PI * 2;
+                    var len = 4 + Math.floor(gpu * 8);
+                    var x = cx, y = cy;
+                    ctx.fillStyle = "rgba(170,225,255,0.9)";
+                    for (var s = 0; s < len; s++) {
+                        x += Math.cos(ang + (A.hash(slot, a * 9 + s, 13) - 0.5) * 1.4);
+                        y += Math.sin(ang + (A.hash(slot, a * 9 + s, 14) - 0.5) * 1.4);
+                        ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Notes rise from the tavern and the square while something is playing
+function drawMusic(ctx, w, lib, env, t) {
+    if (!w.sig.audio || env.night)
+        return;
+    var spots = [{
+            x: w.centre.x * TILE + 4,
+            y: w.centre.y * TILE - 2
+        }];
+    for (var i = 0; i < w.buildings.length; i++)
+        if (w.buildings[i].type === "tavern" && w.buildings[i].progress >= 1)
+            spots.push({
+                x: w.buildings[i].door.x * TILE + 4,
+                y: w.buildings[i].door.y * TILE - 6
+            });
+    var hues = ["#f4d03a", "#f08ab0", "#8ac0f0", "#9ae08a"];
+    for (var s = 0; s < spots.length; s++)
+        for (var k = 0; k < 4; k++) {
+            var life = (t * 0.45 + k * 0.25 + s * 0.13) % 1;
+            var x = Math.round(spots[s].x + Math.sin(life * 6 + k * 2) * 4 + (k - 1.5) * 4);
+            var y = Math.round(spots[s].y - life * 20);
+            ctx.fillStyle = "rgba(" + (k % 2 ? "250,240,200" : "255,210,230") + "," + (1 - life).toFixed(2) + ")";
+            ctx.fillRect(x, y + 2, 2, 2);
+            ctx.fillRect(x + 1, y - 1, 1, 3);
+            ctx.fillStyle = hues[k];
+            ctx.fillRect(x, y + 2, 1, 1);
+        }
+}
+
+// A pigeon for every notification: in from the edge, a rest at the town hall, away on the other side
+function drawPigeons(ctx, w, env) {
+    var W = w.cols * TILE;
+    var hall = null;
+    for (var i = 0; i < w.buildings.length; i++)
+        if (w.buildings[i].type === "townhall" && w.buildings[i].progress >= 1)
+            hall = w.buildings[i];
+    var tx = (hall ? hall.door.x : w.centre.x) * TILE + 4, ty = (hall ? hall.door.y : w.centre.y + 1) * TILE - 1;
+    for (var k = 0; k < w.fx.length; k++) {
+        var f = w.fx[k];
+        var age = (w.time - f.t0) / 1000;
+        var x, y, perch = false;
+        var sx = f.side ? W + 6 : -6;
+        if (age < 8) {
+            var u = age / 8;
+            x = sx + (tx - sx) * u;
+            y = ty - 40 * (1 - u) * (1 - u) - Math.sin(u * 3) * 4;
+        } else if (age < 14) {
+            x = tx + (k % 2 ? 6 : -6);
+            y = ty;
+            perch = true;
+        } else {
+            var o = (age - 14) / 6;
+            x = tx + (f.side ? -1 : 1) * (W * 0.6) * o;
+            y = ty - 50 * o;
+        }
+        x = Math.round(x);
+        y = Math.round(y);
+        ctx.fillStyle = "#c6cad6";
+        ctx.fillRect(x - 1, y - 2, 3, 2);
+        ctx.fillStyle = "#8a90a4";
+        ctx.fillRect(x + 2, y - 3, 1, 1);
+        if (!perch) {
+            var flap = Math.floor(age * 8) % 2;
+            ctx.fillStyle = "#e6e8f0";
+            ctx.fillRect(x - 2, y - 3 - flap, 2, 1);
+            ctx.fillRect(x + 1, y - 3 - flap, 2, 1);
+        } else {
+            ctx.fillStyle = "#e6e8f0";
+            ctx.fillRect(x, y - 3, 1, 1);
+        }
+    }
 }

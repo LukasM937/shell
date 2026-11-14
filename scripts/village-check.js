@@ -23,7 +23,7 @@ function source(name) {
 
 // Wrapped in a function that takes Math as an argument: globals of a vm context are slow to reach
 const V = vm.runInNewContext(`(function (Math) {\n${source("village.js")}\nreturn { BUILD, T, O, TILE, COLS, ROWS, create, step, setSignals, snapshot, census, drainEvents, findPath, regionOf, popTarget, footprintFree, idx, updateEnv, weatherKind, seasonOf, rates, renownPerHour };\n})`)(Math);
-const A = vm.runInNewContext(`(function (Math) {\n${source("vart.js")}\nreturn { TYPES, library, blit, hash, mix, shade, SKIN, HAIR, CLOTHES, TILE, buildingSprite };\n})`)(Math);
+const A = vm.runInNewContext(`(function (Math) {\n${source("vart.js")}\nreturn { TYPES, library, blit, blitFlipped, hash, mix, shade, SKIN, HAIR, CLOTHES, TILE, buildingSprite };\n})`)(Math);
 const D = vm.runInNewContext(`(function (Math) {\n${source("vdraw.js")}\nreturn { init, paintGround, paintObjects, drawDynamic, drawWeather, drawLights, ambient, placeBuilding, covered, TILE };\n})`)(Math);
 const P = vm.runInNewContext(`(function (Math, Uint8ClampedArray) {\n${source("vposter.js")}\nreturn { Raster, base64, village };\n})`)(Math, Uint8ClampedArray);
 D.init(A);

@@ -166,8 +166,13 @@ function hash(x, y, z) {
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
+// While a library for a snowy winter is built, every sprite gets a cap of snow on its upward edges
+var snowMode = false;
+
 // Merges the grid into rectangles, sorted by colour so a canvas changes its fill style as seldom as it can
 function toSprite(s, extra) {
+    if (snowMode && !(extra && extra.noSnow))
+        snowCap(s, 2);
     var rects = [];
     var open = {};
     for (var j = 0; j < s.h; j++) {
@@ -235,6 +240,19 @@ function blit(ctx, spr, x, y, cut) {
             last = r.c;
         }
         ctx.fillRect(x + r.x, y + top, r.w, h);
+    }
+}
+
+// The same, mirrored, for things that move to the left
+function blitFlipped(ctx, spr, x, y) {
+    var last = "";
+    for (var i = 0; i < spr.r.length; i++) {
+        var r = spr.r[i];
+        if (r.c !== last) {
+            ctx.fillStyle = r.c;
+            last = r.c;
+        }
+        ctx.fillRect(x + spr.w - r.x - r.w, y + r.y, r.w, r.h);
     }
 }
 
@@ -1302,6 +1320,7 @@ function prop(id) {
 
 // Every sprite the scene needs for a season, built once and reused. snowy swaps in snow capped versions
 function library(season, snowy) {
+    snowMode = !!snowy;
     var lib = {
         season: season,
         snowy: snowy,
@@ -1355,6 +1374,7 @@ function library(season, snowy) {
     var props = ["crate", "barrel", "hay", "logs", "stones", "lamp", "sign", "boat", "cart", "flower"];
     for (var p = 0; p < props.length; p++)
         lib.prop[props[p]] = prop(props[p]);
+    snowMode = false;
     return lib;
 }
 

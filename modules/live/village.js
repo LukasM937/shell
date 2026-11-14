@@ -574,6 +574,7 @@ function create(opts) {
         sig: {},
         events: [],
         noSpot: {},
+        fx: [],
         dirty: true,
         treeTarget: 0
     };
@@ -1218,7 +1219,13 @@ function setSignals(w, s) {
     sig.audio = !!x.audio;
     sig.weather = x.weather || null;
     sig.now = num(x.now) ? x.now : sig.now;
-    sig.notifs = (sig.notifs || 0) + (num(x.notifs) ? x.notifs : 0);
+    var fresh = num(x.notifs) ? Math.min(3, Math.max(0, Math.floor(x.notifs))) : 0;
+    for (var i = 0; i < fresh && w.fx.length < 4; i++)
+        w.fx.push({
+            kind: "pigeon",
+            t0: w.time,
+            side: w.fx.length % 2
+        });
 }
 
 // How fast people work and walk, from the processor
@@ -2016,8 +2023,56 @@ function paveFront(w, b, tilesWide, tilesDeep) {
                 setGround(w, x, y, T.PLAZA);
 }
 
+// The line a dock's boat sails along: from the water beside it as far as the water goes
+function sailRoute(w, b) {
+    var best = null;
+    var sides = [[-1, 0], [1, 0], [0, 1], [0, -1]];
+    for (var s = 0; s < 4; s++) {
+        var dx = sides[s][0], dy = sides[s][1];
+        var sx = dx < 0 ? b.x - 1 : dx > 0 ? b.x + b.fw : b.x + Math.floor(b.fw / 2);
+        var sy = dy < 0 ? b.y - 1 : dy > 0 ? b.y + b.fh : b.y + Math.floor(b.fh / 2);
+        var n = 0;
+        while (n < 14 && inside(w, sx + dx * n, sy + dy * n) && isWater(w.terrain[idx(w, sx + dx * n, sy + dy * n)]))
+            n++;
+        if (n >= 3 && (!best || n > best.len))
+            best = {
+                x: sx,
+                y: sy,
+                dx: dx,
+                dy: dy,
+                len: n
+            };
+    }
+    b.sail = best;
+}
+
+// The middle of the sea, where the gulls fly, and the road in from the gate that carts follow
+function landmarks(w) {
+    var sx = 0, sy = 0, n = 0;
+    for (var y = 0; y < w.rows; y += 2)
+        for (var x = 0; x < w.cols; x += 2)
+            if (w.terrain[idx(w, x, y)] === T.DEEP) {
+                sx += x;
+                sy += y;
+                n++;
+            }
+    w.seaCentre = n ? {
+        x: sx / n,
+        y: sy / n
+    } : {
+        x: 0,
+        y: 0
+    };
+    w.route = findPath(w, w.gate.x, w.gate.y, w.centre.x, w.centre.y + 1, 6000) || [];
+    for (var i = 0; i < w.buildings.length; i++)
+        if (w.buildings[i].type === "dock")
+            sailRoute(w, w.buildings[i]);
+}
+
 function completeBuilding(w, b) {
     b.progress = 1;
+    if (b.type === "dock")
+        sailRoute(w, b);
     var d = BUILD[b.type];
     if (b.type === "field") {
         for (var j = 0; j < d.fh; j++)
@@ -2557,6 +2612,7 @@ function found(w) {
         }
     }
     layRoad(w, w.gate.x, w.gate.y, c.x, c.y + 1);
+    landmarks(w);
     for (var k = 0; k < 4; k++) {
         var p = addPerson(w, w.gate.x, w.gate.y, "adult");
         assignHome(w, p);
@@ -2570,6 +2626,9 @@ function found(w) {
 function step(w, dt) {
     w.tick++;
     w.time += dt * 1000;
+    // a pigeon stays for twenty seconds
+    while (w.fx.length && w.time - w.fx[0].t0 > 20000)
+        w.fx.shift();
     if (w.env.now === undefined || !w.sig.now)
         w.sig.now = w.sig.now || w.time;
     updateEnv(w, dt);
@@ -2815,6 +2874,7 @@ function restore(w, s) {
     w.treeTarget = s.treeTarget || Math.round(w.trees.length);
     w.time = s.time || w.time;
     w.rng = mulberry(s.rng);
+    landmarks(w);
 }
 
 function census(w) {
