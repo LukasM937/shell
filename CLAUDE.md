@@ -19,10 +19,14 @@ python3 scripts/trs-check.py              # translation helper misuse
 qmlformat <file.qml> | diff -u <file.qml> -   # no output means formatted
 clang-format --dry-run --Werror <file>    # C++ only, needs clang-format 20+
 node scripts/runner-check.js              # lock screen game: no map may be unwinnable, run after touching modules/lock/runner.js
+node scripts/cat-check.js                 # dashboard cat: stays in its room, sleeps at night, follows the pointer, run after touching modules/dashboard/dash/cat.js
 ```
 
 `qmlformat` without a Qt install: `python3 -m venv v && v/bin/pip install PySide6-Essentials`, then use
 `v/lib/python*/site-packages/PySide6/qmlformat`. Version 6.12 matches the repo's formatting exactly.
+
+`node scripts/cat-render.js sheet out.png` draws the dashboard cat in all its poses into a PNG; look at it after touching
+modules/dashboard/dash/cat.js, the check cannot tell a pretty cat from an ugly one.
 
 ## Code rules
 
