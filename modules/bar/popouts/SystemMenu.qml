@@ -95,6 +95,28 @@ ColumnLayout {
     }
 
     ActionRow {
+        icon: "wifi_tethering"
+        text: Tr.tr("AirDrop")
+        subtext: {
+            switch (AirDrop.state) {
+            case "missing":
+                return Tr.tr("Click to install owly");
+            case "armed":
+                return Tr.tr("Turns Wi-Fi off while on, click again to start");
+            case "starting":
+                return Tr.tr("Starting...");
+            case "on":
+                // TRANSLATORS: %1 = minutes left, %2 = seconds left, shown as e.g. "9:05"
+                return Tr.tr("Visible to everyone, %1:%2 left").arg(Math.floor(AirDrop.left / 60)).arg(String(AirDrop.left % 60).padStart(2, "0"));
+            }
+            return AirDrop.error;
+        }
+        highlighted: AirDrop.state === "on" || AirDrop.state === "starting"
+        visible: AirDrop.state !== "unknown"
+        onClicked: AirDrop.toggle()
+    }
+
+    ActionRow {
         icon: "settings"
         text: Tr.tr("Settings")
         onClicked: {
