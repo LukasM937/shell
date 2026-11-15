@@ -8,6 +8,9 @@ RowLayout {
     id: root
 
     required property var lock
+    // The cards sit padding.extraLargeIncreased / 2 inside the lock's outer corners (radius extraLarge * 1.5), so their outer
+    // corners need that radius minus the gap to keep the gap even all the way round the corner
+    readonly property real cornerRadius: Math.max(Tokens.rounding.medium, Tokens.rounding.extraLarge * 1.5 - Tokens.padding.extraLargeIncreased / 2)
 
     spacing: Tokens.spacing.largeIncreased * 2
 
@@ -17,6 +20,7 @@ RowLayout {
 
         WeatherInfo {
             Layout.fillWidth: true
+            topLeftRadius: root.cornerRadius
             rootHeight: root.height
         }
 
@@ -28,6 +32,7 @@ RowLayout {
         Media {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            bottomLeftRadius: root.cornerRadius
             lock: root.lock
         }
     }
@@ -42,6 +47,7 @@ RowLayout {
 
         Resources {
             Layout.fillWidth: true
+            topRightRadius: root.cornerRadius
         }
 
         StyledRect {
@@ -49,6 +55,7 @@ RowLayout {
             Layout.fillHeight: true
 
             radius: Tokens.rounding.medium
+            bottomRightRadius: root.cornerRadius
             color: Colours.tPalette.m3surfaceContainer
 
             NotifDock {
