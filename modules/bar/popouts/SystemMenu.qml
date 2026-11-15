@@ -37,7 +37,8 @@ ColumnLayout {
 
         Loader {
             Layout.alignment: Qt.AlignVCenter
-            sourceComponent: SysInfo.isDefaultLogo ? caelestiaLogo : distroIcon
+            // The cat that used to sit in the session menu, when there is one, otherwise the logo
+            sourceComponent: Config.paths.sessionGif.trim() !== "" ? sessionCat : SysInfo.isDefaultLogo ? caelestiaLogo : distroIcon
         }
 
         ColumnLayout {
@@ -138,6 +139,23 @@ ColumnLayout {
         icon: Config.session.icons.shutdown
         text: Tr.tr("Shut down")
         onClicked: root.run(Config.session.commands.shutdown)
+    }
+
+    Component {
+        id: sessionCat
+
+        AnimatedImage {
+            width: Tokens.sizes.session.button
+            height: Tokens.sizes.session.button
+            sourceSize.width: width * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
+
+            playing: visible
+            asynchronous: true
+            smooth: false
+            speed: Config.general.sessionGifSpeed
+            source: Paths.absolutePath(Config.paths.sessionGif)
+            fillMode: AnimatedImage.PreserveAspectFit
+        }
     }
 
     Component {
