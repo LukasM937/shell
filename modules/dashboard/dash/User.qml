@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Widgets
 import Caelestia.Config
 import qs.components
 import qs.components.filedialog
@@ -12,8 +13,9 @@ Item {
 
     anchors.fill: parent
 
-    ClipRect {
+    ClippingRectangle {
         anchors.fill: parent
+        color: "transparent"
         radius: Tokens.rounding.medium
 
         CatView {
