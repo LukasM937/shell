@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Draws the dashboard cat without a shell: a sheet of its poses to a PNG.
 //
-//   node scripts/cat-render.js sheet out.png [--zoom 4]
+//   node scripts/cat-render.js sheet out.png [--zoom 3] [--width 140]
 //
 // It runs the same module as the shell (modules/dashboard/dash/cat.js) on a small software canvas that has only fillRect.
 
@@ -142,7 +142,8 @@ function png(raster) {
 
 function sheet(out) {
     const cat = load();
-    const zoom = parseInt(args.zoom ?? "4");
+    const zoom = parseInt(args.zoom ?? "3");
+    const w = parseInt(args.width ?? "140");
     const day = { night: false, hover: false, pointer: -1, busy: 0 };
     const night = { night: true, hover: false, pointer: -1, busy: 0 };
     const to = (c, x, act) => {
@@ -156,35 +157,35 @@ function sheet(out) {
         [c => cat.enter(c, "sit", 99), day, 1],
         [c => cat.enter(c, "wash", 99), day, 1.1],
         [c => cat.pet(c), day, 1.3],
-        [c => to(c, 32, "walk"), day, 0],
-        [c => to(c, 44, "walk"), day, 0.3],
-        [c => to(c, 44, "walk"), day, 0.5],
+        [c => to(c, 70, "walk"), day, 0],
+        [c => to(c, 100, "walk"), day, 0.3],
+        [c => to(c, 100, "walk"), day, 0.5],
         [c => {
-            c.x = 40;
+            c.x = 90;
             to(c, 4, "walk");
         }, day, 0.4],
         [c => {
             cat.enter(c, "play", 99);
             c.batT = 0.4;
-            c.ball.x = 48;
+            c.ball.x = 100;
         }, day, 0.1],
         [c => {
             c.laps = 3;
-            to(c, 44, "zoom");
+            to(c, 120, "zoom");
         }, day, 0.4],
-        [c => cat.enter(c, "follow", 99), { night: false, hover: true, pointer: 46, busy: 0 }, 2]
+        [c => cat.enter(c, "follow", 99), { night: false, hover: true, pointer: 110, busy: 0 }, 2]
     ];
-    const cols = 5;
+    const cols = 2;
     const rows = Math.ceil(poses.length / cols);
-    const img = new Raster((cat.W + 2) * cols * zoom, (cat.H + 2) * rows * zoom);
+    const img = new Raster((w + 2) * cols * zoom, (cat.H + 2) * rows * zoom);
     poses.forEach(([setup, env, secs], n) => {
-        const c = cat.create(7);
+        const c = cat.create(7, w);
         setup(c);
         for (let t = 0; t < secs; t += 0.05)
             cat.step(c, 0.05, env);
-        const tile = new Raster(cat.W, cat.H);
+        const tile = new Raster(w, cat.H);
         cat.draw(tile, c, env);
-        img.drawRaster(tile.zoomed(zoom), (n % cols) * (cat.W + 2) * zoom, Math.floor(n / cols) * (cat.H + 2) * zoom);
+        img.drawRaster(tile.zoomed(zoom), (n % cols) * (w + 2) * zoom, Math.floor(n / cols) * (cat.H + 2) * zoom);
     });
     fs.writeFileSync(out, png(img));
 }
@@ -192,6 +193,6 @@ function sheet(out) {
 if (positional[0] === "sheet")
     sheet(positional[1] ?? "cat.png");
 else {
-    console.error("usage: cat-render.js sheet out.png [--zoom 4]");
+    console.error("usage: cat-render.js sheet out.png [--zoom 4] [--width 140]");
     process.exit(1);
 }

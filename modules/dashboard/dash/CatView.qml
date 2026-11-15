@@ -3,14 +3,16 @@ import Caelestia.Services
 import qs.services
 import "cat.js" as Cat
 
-// The cat that lives in the dashboard: a pixel room drawn at 64x64 pixels and scaled up without smoothing
+// The cat that lives in the dashboard: a pixel room 64 pixels high and as wide as the card, scaled up without smoothing
 Item {
     id: root
 
     property bool hovered
     // Pointer position in this item's own coordinates, only read while hovered
     property real pointerX: -1
-    property var cat: Cat.create(Date.now() % 100000 + 1)
+    // Virtual pixels across, so the room fills the card whatever its shape
+    readonly property int gridWidth: Math.max(Cat.H, Math.ceil(width / Math.max(1, height) * Cat.H))
+    property var cat: Cat.create(Date.now() % 100000 + 1, gridWidth)
     property real last
 
     function pet(): void {
@@ -28,6 +30,13 @@ Item {
         };
     }
 
+    onGridWidthChanged: {
+        cat.w = gridWidth;
+        cat.rug = gridWidth / 2;
+        cat.x = Math.max(Cat.MARGIN, Math.min(gridWidth - Cat.MARGIN, cat.x));
+        canvas.requestPaint();
+    }
+
     ServiceRef {
         service: Cpu
     }
@@ -35,11 +44,9 @@ Item {
     Canvas {
         id: canvas
 
-        width: Cat.W
+        width: root.gridWidth
         height: Cat.H
-        scale: Math.min(root.width, root.height) / Cat.W
-        x: (root.width - width * scale) / 2
-        y: (root.height - height * scale) / 2
+        scale: root.height / Cat.H
         transformOrigin: Item.TopLeft
         smooth: false
 

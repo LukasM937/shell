@@ -1,17 +1,15 @@
 .pragma library
 
-// The dashboard cat: a pixel cat in a small room, 64x64 virtual pixels. It sleeps on its rug at night, and by day walks,
+// The dashboard cat: a pixel cat in a room that is 64 virtual pixels high and as wide as its card. It sleeps on its rug at night, and by day walks,
 // sits, washes, bats a ball of yarn about, comes to the pointer and purrs when it is stroked. It has no QML dependencies,
 // draws with fillRect only, and all of its randomness goes through c.s, so scripts/cat-render.js can draw it into a PNG and
 // scripts/cat-check.js can run it for days.
 
-var W = 64;
+// The room is H high and w wide (at least H, set by the card's shape). The cat reaches 19 pixels behind its feet (the
+// tail) and 17 in front, so MARGIN keeps it inside the room
 var H = 64;
 var FLOOR = 52;
-var RUG = 32;
-// The cat reaches 19 pixels behind its feet (the tail) and 17 in front, so these keep it inside the room
-var LEFT = 20;
-var RIGHT = 44;
+var MARGIN = 20;
 
 var OUT = "#16161e";
 var FUR = "#a9b1d6";
@@ -27,16 +25,19 @@ var YARN = "#e0af68";
 var YARN_DARK = "#b9894a";
 var ZED = "#7dcfff";
 
-function create(seed) {
+function create(seed, w) {
+    w = Math.max(H, Math.round(w || H));
     return {
+        w: w,
+        rug: w / 2,
         s: (seed | 0) || 1,
         t: 0,
-        x: RUG,
+        x: w / 2,
         dir: 1,
         act: "sit",
         actT: 0,
         actDur: 3,
-        tx: RUG,
+        tx: w / 2,
         phase: 0,
         moving: false,
         blink: 2,
@@ -47,7 +48,7 @@ function create(seed) {
         purr: 0,
         look: 0,
         hoverT: 0,
-        ball: { x: 42, h: 0, vx: 0, vh: 0 },
+        ball: { x: w / 2 + 10, h: 0, vx: 0, vh: 0 },
         zs: [],
         hearts: [],
         zT: 0
@@ -68,7 +69,7 @@ function enter(c, act, dur) {
 }
 
 function walkTo(c, x) {
-    c.tx = Math.max(LEFT, Math.min(RIGHT, x));
+    c.tx = Math.max(MARGIN, Math.min(c.w - MARGIN, x));
 }
 
 function choose(c, env) {
@@ -83,15 +84,15 @@ function choose(c, env) {
         else if (r < 0.9)
             enter(c, "sit", 3 + rnd(c) * 4);
         else {
-            walkTo(c, LEFT + rnd(c) * (RIGHT - LEFT));
+            walkTo(c, MARGIN + rnd(c) * (c.w - 2 * MARGIN));
             enter(c, "walk", 1e9);
         }
     } else if (env.busy > 0.7 && r < 0.3) {
         enter(c, "zoom", 1e9);
         c.laps = 3;
-        walkTo(c, c.x < RUG ? RIGHT : LEFT);
+        walkTo(c, c.x < c.rug ? c.w : 0);
     } else if (r < 0.3) {
-        walkTo(c, LEFT + rnd(c) * (RIGHT - LEFT));
+        walkTo(c, MARGIN + rnd(c) * (c.w - 2 * MARGIN));
         enter(c, "walk", 1e9);
     } else if (r < 0.5) {
         enter(c, "sit", 3 + rnd(c) * 5);
@@ -132,8 +133,8 @@ function moveToward(c, dt, speed) {
 function stepBall(c, dt) {
     var b = c.ball;
     b.x += b.vx * dt;
-    if (b.x < 8 || b.x > W - 8) {
-        b.x = Math.max(8, Math.min(W - 8, b.x));
+    if (b.x < 8 || b.x > c.w - 8) {
+        b.x = Math.max(8, Math.min(c.w - 8, b.x));
         b.vx = -b.vx * 0.7;
     }
     if (b.h > 0 || b.vh > 0) {
@@ -176,7 +177,7 @@ function step(c, dt, env) {
             choose(c, env);
         break;
     case "goSleep":
-        c.tx = RUG;
+        c.tx = c.rug;
         if (moveToward(c, dt, 8))
             enter(c, "sleep", env.night ? 60 + rnd(c) * 60 : 15 + rnd(c) * 20);
         break;
@@ -189,7 +190,7 @@ function step(c, dt, env) {
             if (--c.laps <= 0)
                 enter(c, "sit", 2);
             else
-                walkTo(c, c.tx > RUG ? LEFT : RIGHT);
+                walkTo(c, c.tx > c.rug ? 0 : c.w);
         }
         break;
     case "sit":
@@ -233,7 +234,7 @@ function step(c, dt, env) {
             }
         } else {
             var dir = c.ball.x >= c.x ? 1 : -1;
-            c.tx = Math.max(LEFT, Math.min(RIGHT, c.ball.x - dir * 10));
+            c.tx = Math.max(MARGIN, Math.min(c.w - MARGIN, c.ball.x - dir * 10));
             if (Math.abs(c.tx - c.x) > 1.5 || c.ball.vx !== 0)
                 moveToward(c, dt, 14);
             else
@@ -382,47 +383,54 @@ function pixels(ctx, pattern, x, y, col) {
                 ctx.fillRect(Math.round(x) + i, Math.round(y) + j, 1, 1);
 }
 
-function drawRoom(ctx, env) {
-    var night = env.night;
-    ctx.fillStyle = night ? "#1f2335" : "#2a3050";
-    ctx.fillRect(0, 0, W, H);
-    // window with the sky of the hour
+// A window with the sky of the hour, 14 wide, its left edge at x
+function drawWindow(ctx, x, night) {
     ctx.fillStyle = "#414868";
-    ctx.fillRect(44, 5, 14, 14);
+    ctx.fillRect(x, 5, 14, 14);
     ctx.fillStyle = night ? "#10121c" : "#7aa2f7";
-    ctx.fillRect(45, 6, 12, 12);
+    ctx.fillRect(x + 1, 6, 12, 12);
     ctx.fillStyle = night ? "#c0caf5" : "#e0af68";
     if (night) {
-        ctx.fillRect(50, 8, 3, 3);
+        ctx.fillRect(x + 6, 8, 3, 3);
         ctx.fillStyle = "#10121c";
-        ctx.fillRect(51, 8, 2, 2);
+        ctx.fillRect(x + 7, 8, 2, 2);
         ctx.fillStyle = "#c0caf5";
-        ctx.fillRect(47, 14, 1, 1);
-        ctx.fillRect(54, 15, 1, 1);
-        ctx.fillRect(48, 9, 1, 1);
+        ctx.fillRect(x + 3, 14, 1, 1);
+        ctx.fillRect(x + 10, 15, 1, 1);
+        ctx.fillRect(x + 4, 9, 1, 1);
     } else {
-        ctx.fillRect(49, 8, 4, 4);
+        ctx.fillRect(x + 5, 8, 4, 4);
         ctx.fillStyle = "#b9c8f5";
-        ctx.fillRect(46, 14, 5, 2);
-        ctx.fillRect(53, 11, 3, 2);
+        ctx.fillRect(x + 2, 14, 5, 2);
+        ctx.fillRect(x + 9, 11, 3, 2);
     }
     ctx.fillStyle = "#414868";
-    ctx.fillRect(50, 6, 1, 12);
-    ctx.fillRect(45, 12, 12, 1);
+    ctx.fillRect(x + 6, 6, 1, 12);
+    ctx.fillRect(x + 1, 12, 12, 1);
+}
+
+function drawRoom(ctx, c, env) {
+    var night = env.night;
+    var w = c.w;
+    ctx.fillStyle = night ? "#1f2335" : "#2a3050";
+    ctx.fillRect(0, 0, w, H);
+    var n = w <= 80 ? 1 : Math.max(2, Math.round(w / 70));
+    for (var i = 0; i < n; i++)
+        drawWindow(ctx, Math.round(n === 1 ? w - 20 : (i + 0.5) * w / n - 7), night);
     // floor
     ctx.fillStyle = "#24283b";
-    ctx.fillRect(0, FLOOR, W, H - FLOOR);
+    ctx.fillRect(0, FLOOR, w, H - FLOOR);
     ctx.fillStyle = "#1a1b26";
-    ctx.fillRect(0, FLOOR, W, 1);
-    ctx.fillRect(0, FLOOR + 5, W, 1);
+    ctx.fillRect(0, FLOOR, w, 1);
+    ctx.fillRect(0, FLOOR + 5, w, 1);
     // rug
     ctx.fillStyle = RUG_B;
-    ctx.fillRect(RUG - 14, FLOOR - 1, 28, 4);
+    ctx.fillRect(c.rug - 14, FLOOR - 1, 28, 4);
     ctx.fillStyle = RUG_A;
-    ctx.fillRect(RUG - 14, FLOOR - 1, 28, 2);
+    ctx.fillRect(c.rug - 14, FLOOR - 1, 28, 2);
     ctx.fillStyle = RUG_RIM;
-    ctx.fillRect(RUG - 12, FLOOR - 1, 5, 1);
-    ctx.fillRect(RUG + 7, FLOOR - 1, 5, 1);
+    ctx.fillRect(c.rug - 12, FLOOR - 1, 5, 1);
+    ctx.fillRect(c.rug + 7, FLOOR - 1, 5, 1);
 }
 
 function drawBall(ctx, c) {
@@ -450,7 +458,7 @@ function draw(ctx, c, env) {
     var place = function (r) {
         return d > 0 ? [cx + r[0], cy + r[1], r[2], r[3]] : [cx - r[0] - r[2], cy + r[1], r[2], r[3]];
     };
-    drawRoom(ctx, env);
+    drawRoom(ctx, c, env);
     drawBall(ctx, c);
     // shadow
     ctx.globalAlpha = 0.3;
