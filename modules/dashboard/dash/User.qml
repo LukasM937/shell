@@ -4,17 +4,16 @@ import QtQuick
 import M3Shapes
 import Caelestia.Config
 import Caelestia.I18n
-import Caelestia.Multimedia
 import qs.components
 import qs.components.effects
 import qs.components.filedialog
 import qs.services
-import qs.utils
 
 Item {
     id: root
 
     required property ScreenState screenState
+    // Kept for the dashboard that creates this; the cat took the place of the profile picture, so nothing picks a face now
     required property FileDialog facePicker
 
     property color pfpFallbackColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
@@ -57,10 +56,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    root.screenState.dashboard = false;
-                    root.facePicker.open();
-                }
+                onClicked: cat.pet()
             }
         }
 
@@ -71,63 +67,12 @@ Item {
                 maskSource: shape
             }
 
-            Loader {
-                anchors.centerIn: parent
-                asynchronous: true
-                active: !pfp.ready
-
-                sourceComponent: MaterialIcon {
-                    text: "person_add"
-                    color: Colours.palette.m3onSurfaceVariant
-                    fontStyle: Tokens.font.icon.extraLarge
-                    fill: 1
-                    grade: -2 // Ugh material symbols are such a pain with fill
-                }
-            }
-
-            Visual {
-                id: pfp
+            CatView {
+                id: cat
 
                 anchors.fill: parent
-                source: `${Paths.home}/.face`
-            }
-
-            StyledRect {
-                anchors.fill: parent
-                color: Qt.alpha(Colours.palette.m3scrim, pfp.ready ? 0.4 : 0)
-                opacity: mouse.containsMouse ? 1 : 0
-                layer.enabled: opacity < 1
-
-                Behavior on opacity {
-                    Anim {
-                        type: Anim.DefaultEffects
-                    }
-                }
-
-                MaterialShape {
-                    anchors.centerIn: parent
-                    implicitSize: parent.height * 0.7
-                    shape: MaterialShape.Diamond
-                    color: Colours.palette.m3primary
-                    scale: mouse.pressed ? 0.9 : mouse.containsMouse ? 1 : 0.7
-
-                    Behavior on color {
-                        CAnim {}
-                    }
-
-                    Behavior on scale {
-                        Anim {
-                            type: Anim.FastSpatial
-                        }
-                    }
-
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: "person_edit"
-                        color: Colours.palette.m3onPrimary
-                        fontStyle: Tokens.font.icon.large
-                    }
-                }
+                hovered: mouse.containsMouse
+                pointerX: mouse.mouseX
             }
         }
     }
