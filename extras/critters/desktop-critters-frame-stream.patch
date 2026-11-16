@@ -1,0 +1,765 @@
+From f661773527b1f881f5d4cd4b384cc6089f080af5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 16 Nov 2026 13:44:47 +0000
+Subject: [PATCH] Serve the frames as JSON lines for other renderers; place and
+ park a critter
+
+critterd --stream [PATH] publishes the frame slot on a second Unix socket (30 Hz by default, nothing
+serialised while nobody listens), so a renderer that is not Rust can draw the sim: the Caelestia shell uses
+it on Hyprland, where there is no overlay of our own yet. The frame types derive serde, and the wire format
+is critter_core::stream.
+
+ControlRequest::Place puts the critter somewhere the world does not know (a drawer of the shell), on the
+front lane, flying off with a velocity: it forgets its intent and flies the throw ballistically until it
+stands on something. Park hides and pauses it. critterctl gets place and park.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X2zvJeb9JDad91rHxErR1K
+---
+ CLAUDE.md                          |  17 +++-
+ README.md                          |  10 +++
+ crates/critter-core/src/control.rs |  41 ++++++++-
+ crates/critter-core/src/frame.rs   |  15 ++--
+ crates/critter-core/src/lib.rs     |   2 +
+ crates/critter-core/src/stream.rs  |  63 ++++++++++++++
+ crates/critterctl/src/main.rs      |  15 +++-
+ crates/critterd/src/main.rs        |  25 +++++-
+ crates/critterd/src/sim.rs         | 127 ++++++++++++++++++++++++++++
+ crates/critterd/src/stream.rs      | 128 +++++++++++++++++++++++++++++
+ 10 files changed, 426 insertions(+), 17 deletions(-)
+ create mode 100644 crates/critter-core/src/stream.rs
+ create mode 100644 crates/critterd/src/stream.rs
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 63b6073..dc57210 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -19,6 +19,8 @@ cargo run -p critterd -- --source fake --headless --duration 20   # scripted des
+ cargo run -p critterd -- --source hyprland --brain ollama   # Hyprland desktop + brain (model clef-flash) (no renderer there yet)
+ cargo run -p critter-adapters --example dump                   # print the live macOS snapshot (outputs, windows front→back, cursor)
+ cargo run -p critterctl -- status | goto 800 400 --layer 3 | window <addr> | steal-mouse | forward | back
++cargo run -p critterd -- --source hyprland --headless --stream   # frames as JSON lines on $XDG_RUNTIME_DIR/desktop-critters-frames.sock (the Caelestia shell draws them)
++cargo run -p critterctl -- place 700 40 --vx 160 --vy -260 | park   # throw the critter in from outside the world / hide and pause it
+ ```
+ 
+ Brain needs Ollama ≥ 0.35.1 and `ollama pull clef-flash` (11 GB; Cloudflare's 9B fine-tune of Qwen3.5-9B,
+@@ -31,12 +33,12 @@ A smaller battery-friendly model is still to be chosen. Override with `--model`.
+ 
+ | Crate | Role | Platform deps |
+ | --- | --- | --- |
+-| `critter-core` | Geometry, `Snapshot`, layered `World`, **`SurfaceMap`** (window loops/floors/screen edges + where they touch), **`nav`** (A* over it, gated by species `Abilities`; crawl, wrap, drop and **leap** edges), **`ballistic`** (launch arcs between surface points + obstacle/screen checks), Intent API + `Arbiter`, the older seek-and-hop `Planner` (fallback), procedural `Animator` (→ `Pose`), `Frame`/`FrameSlot` (sim → renderer contract), species files, control-socket protocol | none |
++| `critter-core` | Geometry, `Snapshot`, layered `World`, **`SurfaceMap`** (window loops/floors/screen edges + where they touch), **`nav`** (A* over it, gated by species `Abilities`; crawl, wrap, drop and **leap** edges), **`ballistic`** (launch arcs between surface points + obstacle/screen checks), Intent API + `Arbiter`, the older seek-and-hop `Planner` (fallback), procedural `Animator` (→ `Pose`), `Frame`/`FrameSlot` (sim → renderer contract), `stream` (the frame wire format), species files, control-socket protocol (`Intent`, `Status`, `Place`, `Park`) | none |
+ | `critter-brain` | `/v1/systemone` types + blocking client, `DecisionMenu` (options → question set → `Intent`), temperature sampling | reqwest |
+ | `critter-physics` | `DesktopPhysics`: rapier3d world with window slabs (kinematic), floors/walls per output, planar capsule critter + motor | rapier3d |
+ | `critter-adapters` | `WindowSource` trait; `hyprland` (hyprctl IPC), `macos` (CGWindowList + CGDisplay + NSScreen, done), `fake` (scripted 2-monitor desktop) | per OS |
+ | `critter-render` | Transparent click-through overlay, one small window per critter; draws `Frame`s. `draw.rs` does what every species shares, **`art/` has one file per species** behind `SpeciesArt` (registry by name, shared `kit`) — see `docs/CRITTERS.md`. macOS done, Hyprland layer-shell TODO | per OS |
+-| `critterd` | Daemon. `crowd::Crowd` holds one `Sim` per species (one by default, `--all` = every species file; each has its own physics, they share the windows; unaimed `critterctl` commands reach all, `--species NAME` one). `sim::Sim` (world → relayer → `mover` on the surface graph, else planner → physics 240 Hz → `Frame` 60 Hz) runs on its own thread, the main thread runs the overlay; control socket; brain thread or `wander` | — |
++| `critterd` | Daemon. `crowd::Crowd` holds one `Sim` per species (one by default, `--all` = every species file; each has its own physics, they share the windows; unaimed `critterctl` commands reach all, `--species NAME` one). `sim::Sim` (world → relayer → `mover` on the surface graph, else planner → physics 240 Hz → `Frame` 60 Hz) runs on its own thread, the main thread runs the overlay; control socket; `stream` (`--stream`: the latest frame as JSON lines on a second socket, for a renderer in another program); brain thread or `wander` | — |
+ | `critterctl` | Manual control: sends `Intent`s with `source = manual` over the socket | — |
+ 
+ Assets: `assets/species/*.toml` (bean, gecko, fish, bird, human, ostrich, goose, penguin, snake, cat, frog, crab, turtle, jellyfish, dragon; adding one: `docs/CRITTERS.md`; 24 concepts in `docs/bestiary/`, the first six built), `assets/mjcf/bean.xml` (phase-2 articulated body).
+@@ -143,6 +145,15 @@ Assets: `assets/species/*.toml` (bean, gecko, fish, bird, human, ostrich, goose,
+   the menu offer a flyer every visible window top on its monitor.
+ - **Layer pitch.** `LAYER_PITCH_M` is 1 m: a critter's capsule is as deep as it is wide, so a big
+   body (anything over ~28 px) used to touch the slab of the *adjacent* layer.
++- **Frame stream, place, park.** `critterd --stream [PATH]` serves the `FrameSlot` on a Unix socket
++  (`default_frames_socket_path`, `--stream-hz` 30): one `{"t": seconds, "frame": Frame}` line per tick, the
++  newcomer gets the latest at once, nothing is serialised while nobody listens, a client that stops reading
++  is dropped. It is how a renderer that is not Rust (the Caelestia shell, which draws one critter with its
++  own sprite) gets the sim; it works headless, and next to the macOS overlay. `ControlRequest::Place {feet,
++  velocity}` is for things the world does not know (a drawer of the shell): the critter is put there on the
++  front lane, forgets its intent, and flies its throw ballistically (`Sim::thrown`: the motor is off until it
++  stands on something again) before the brain takes over; `Park` hides it (no critters in the frame) and
++  pauses it, `Place` brings it back. A species file may live outside `assets/`: `--species` takes a path.
+ - **Intents only.** Brain, `critterctl`, scripts all send `Intent`. Priority reflex > manual >
+   script > brain; manual holds control for 5 s after its last command (`Arbiter`).
+   The brain only ever sees options the planner can execute (menu), never emits coordinates.
+@@ -216,7 +227,7 @@ against the code as it is then.
+    the top of the screen on high edge climbs (checks use the body box); `padded()` is generous for
+    tall bodies (the ostrich window is 210x244 px, ~4 % of a core to redraw).
+ 4. **Capture real Hyprland fixtures**, **Hyprland overlay backend** (layer-shell, one small surface
+-   following the critter), **Hyprland event socket**.
++   following the critter; until then `--stream` lets another program draw), **Hyprland event socket**.
+ 5. **Manual control panel** (Lukas, later): arrow keys to walk/jump/climb/swim, sending
+    `source = manual` Intents; a window of our own that takes key focus only while in use.
+ 6. Active ragdoll (phase 2), pick-up-and-throw, virtual props, real art for gecko/fish.
+diff --git a/README.md b/README.md
+index dde21aa..73243bc 100644
+--- a/README.md
++++ b/README.md
+@@ -101,6 +101,16 @@ cargo run -p critterctl -- steal-mouse                  # chase the pointer
+ cargo run -p critterctl -- --species bird goto 900 300  # aim at one critter of a crowd
+ ```
+ 
++### Drawing them from another program
++
++`critterd --stream` serves the frames as JSON lines on a Unix socket (`$XDG_RUNTIME_DIR/desktop-critters-frames.sock`,
++or the path you give it), about 30 a second: `{"t": 12.3, "frame": {"outputs": [...], "critters": [...], "decals": [...]}}`.
++A critter has its `body` rect (the feet are its bottom centre), its `pose` (`kind`, `facing`, `phase`, `squash`,
++`tilt`...), the `layer` and the window rects in front of it (`occluders`, not to be painted inside). That is
++everything a renderer needs, so it works on Hyprland, where there is no overlay of our own yet: the
++Caelestia shell draws its dashboard cat that way. `critterctl place X Y --vx --vy` throws the critter in from
++somewhere the world does not know, and `critterctl park` hides and pauses it.
++
+ ### The model brain (optional)
+ 
+ ```sh
+diff --git a/crates/critter-core/src/control.rs b/crates/critter-core/src/control.rs
+index c01efca..51d16be 100644
+--- a/crates/critter-core/src/control.rs
++++ b/crates/critter-core/src/control.rs
+@@ -13,6 +13,17 @@ use std::path::PathBuf;
+ pub enum ControlRequest {
+     Intent(IntentEnvelope),
+     Status,
++    /// Put the critter with its feet at `feet` (logical px, global desktop space, y down), in front of
++    /// every window, flying off with `velocity` (px/s) and falling from there: a jump out of something
++    /// the world does not know about, such as a drawer of the shell. It also ends whatever it was doing
++    /// and un-parks it.
++    Place {
++        feet: Point,
++        #[serde(default)]
++        velocity: Point,
++    },
++    /// Hide the critter and pause it where it is (no decisions, no drawing) until the next `Place`.
++    Park,
+     /// Aim a request at one critter by species name (when several are running; a lone critter
+     /// takes it as if it were not aimed). Unaimed requests reach every critter.
+     Targeted { species: String, request: Box<ControlRequest> },
+@@ -39,20 +50,42 @@ pub struct StatusReport {
+     pub plan: Option<PlanStatus>,
+     pub windows: usize,
+     pub outputs: usize,
++    #[serde(default)]
++    pub parked: bool,
+ }
+ 
+-pub fn default_socket_path() -> PathBuf {
+-    let dir = std::env::var_os("XDG_RUNTIME_DIR")
++fn runtime_dir() -> PathBuf {
++    std::env::var_os("XDG_RUNTIME_DIR")
+         .or_else(|| std::env::var_os("TMPDIR"))
+         .map(PathBuf::from)
+-        .unwrap_or_else(std::env::temp_dir);
+-    dir.join("desktop-critters.sock")
++        .unwrap_or_else(std::env::temp_dir)
++}
++
++pub fn default_socket_path() -> PathBuf {
++    runtime_dir().join("desktop-critters.sock")
++}
++
++/// Where `critterd --stream` serves frames (see [`crate::stream`]).
++pub fn default_frames_socket_path() -> PathBuf {
++    runtime_dir().join("desktop-critters-frames.sock")
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn place_and_park_are_plain_json() {
++        let place = ControlRequest::Place { feet: Point::new(640.0, 40.0), velocity: Point::new(120.0, -300.0) };
++        let json = serde_json::to_string(&place).unwrap();
++        assert_eq!(json, r#"{"place":{"feet":{"x":640.0,"y":40.0},"velocity":{"x":120.0,"y":-300.0}}}"#);
++        assert_eq!(serde_json::from_str::<ControlRequest>(&json).unwrap(), place);
++        // The velocity may be left out.
++        let bare: ControlRequest = serde_json::from_str(r#"{"place":{"feet":{"x":1,"y":2}}}"#).unwrap();
++        assert_eq!(bare, ControlRequest::Place { feet: Point::new(1.0, 2.0), velocity: Point::default() });
++        assert_eq!(serde_json::to_string(&ControlRequest::Park).unwrap(), r#""park""#);
++    }
++
+     #[test]
+     fn aimed_requests_round_trip_as_json() {
+         let req = ControlRequest::Targeted { species: "bird".into(), request: Box::new(ControlRequest::Status) };
+diff --git a/crates/critter-core/src/frame.rs b/crates/critter-core/src/frame.rs
+index 567c3e6..ab23ef1 100644
+--- a/crates/critter-core/src/frame.rs
++++ b/crates/critter-core/src/frame.rs
+@@ -7,11 +7,12 @@
+ use crate::geometry::{Point, Rect};
+ use crate::snapshot::OutputInfo;
+ use crate::world::Layer;
++use serde::{Deserialize, Serialize};
+ use std::sync::Mutex;
+ use std::sync::atomic::{AtomicBool, Ordering};
+ 
+ /// Everything needed to draw one frame.
+-#[derive(Debug, Clone, Default, PartialEq)]
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+ pub struct Frame {
+     /// One overlay surface per output.
+     pub outputs: Vec<OutputInfo>,
+@@ -21,7 +22,8 @@ pub struct Frame {
+     pub decals: Vec<Decal>,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
+ pub enum DecalKind {
+     /// A black scorch mark with a few embers that glow out in the first seconds.
+     Scorch,
+@@ -29,7 +31,7 @@ pub enum DecalKind {
+ 
+ /// One mark. The simulation keeps it stuck to the window (or the floor) it was made on, so it
+ /// moves with the window; `pos` is where it is now.
+-#[derive(Debug, Clone, PartialEq)]
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ pub struct Decal {
+     pub kind: DecalKind,
+     /// Centre, logical px, global desktop space.
+@@ -46,7 +48,7 @@ pub struct Decal {
+     pub occluders: Vec<Rect>,
+ }
+ 
+-#[derive(Debug, Clone, PartialEq)]
++#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ pub struct CritterSprite {
+     pub species: String,
+     /// Physics bounding box. The feet are the bottom-centre of this rect.
+@@ -62,7 +64,8 @@ pub struct CritterSprite {
+     pub soot: f32,
+ }
+ 
+-#[derive(Debug, Clone, Copy, PartialEq)]
++#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
+ pub enum PoseKind {
+     Idle,
+     Walk,
+@@ -99,7 +102,7 @@ impl PoseKind {
+ }
+ 
+ /// Procedural animation state, computed by [`crate::anim::Animator`].
+-#[derive(Debug, Clone, Copy, PartialEq)]
++#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+ pub struct Pose {
+     pub kind: PoseKind,
+     /// -1 faces left, +1 faces right. Fractional while turning around.
+diff --git a/crates/critter-core/src/lib.rs b/crates/critter-core/src/lib.rs
+index 917ca2b..a1e5db1 100644
+--- a/crates/critter-core/src/lib.rs
++++ b/crates/critter-core/src/lib.rs
+@@ -10,6 +10,7 @@
+ //! - [`surfaces`]: places a critter can stand or cling (window loops, floors, screen edges) and where they touch.
+ //! - [`frame`]: what the simulation hands the overlay renderer each frame.
+ //! - [`control`]: control-socket protocol shared by `critterd` and `critterctl`.
++//! - [`stream`]: the frame stream `critterd --stream` serves to renderers outside the workspace.
+ //! - [`species`]: species files (environment class, body, personality).
+ 
+ pub mod anim;
+@@ -21,6 +22,7 @@ pub mod intent;
+ pub mod nav;
+ pub mod planner;
+ pub mod snapshot;
++pub mod stream;
+ pub mod surfaces;
+ pub mod species;
+ pub mod world;
+diff --git a/crates/critter-core/src/stream.rs b/crates/critter-core/src/stream.rs
+new file mode 100644
+index 0000000..fb069b9
+--- /dev/null
++++ b/crates/critter-core/src/stream.rs
+@@ -0,0 +1,63 @@
++//! The frame stream: what `critterd --stream` writes for renderers outside this workspace (the
++//! Caelestia shell draws its critters with Quickshell). One JSON object per line over a Unix
++//! socket ([`crate::control::default_frames_socket_path`]), a new client first gets the latest
++//! frame. Fields are only ever added, so a client ignores the ones it does not know.
++//!
++//! ```json
++//! {"t":12.34,"frame":{"outputs":[...],"critters":[{"species":"cat","body":{...},"pose":{...},...}],"decals":[]}}
++//! ```
++//!
++//! `t` is seconds on the daemon's clock, for interpolating between frames. A parked critter is
++//! missing from `critters`.
++
++use crate::frame::Frame;
++use serde::{Deserialize, Serialize};
++
++#[derive(Debug, Serialize)]
++struct Line<'a> {
++    t: f64,
++    frame: &'a Frame,
++}
++
++/// One line of the stream, with its newline.
++pub fn line(t: f64, frame: &Frame) -> String {
++    let mut line = serde_json::to_string(&Line { t, frame }).expect("a frame is always serialisable");
++    line.push('\n');
++    line
++}
++
++/// A line read back, for clients written in Rust and for tests.
++#[derive(Debug, Clone, PartialEq, Deserialize)]
++pub struct StreamFrame {
++    pub t: f64,
++    pub frame: Frame,
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::frame::{CritterSprite, Pose, PoseKind};
++    use crate::geometry::Rect;
++    use crate::world::Layer;
++
++    #[test]
++    fn a_frame_survives_the_wire() {
++        let frame = Frame {
++            critters: vec![CritterSprite {
++                species: "cat".into(),
++                body: Rect { x: 100.0, y: 200.0, w: 44.0, h: 30.0 },
++                layer: Layer(2),
++                occluders: vec![Rect { x: 0.0, y: 0.0, w: 50.0, h: 50.0 }],
++                pose: Pose { kind: PoseKind::Run, facing: -1.0, phase: 0.25, ..Pose::default() },
++                variant: 0,
++                soot: 0.0,
++            }],
++            ..Frame::default()
++        };
++        let text = line(3.5, &frame);
++        assert!(text.ends_with('\n') && text.matches('\n').count() == 1, "one line per frame");
++        assert!(text.contains(r#""kind":"run""#), "poses are snake_case words: {text}");
++        let back: StreamFrame = serde_json::from_str(&text).unwrap();
++        assert_eq!(back, StreamFrame { t: 3.5, frame });
++    }
++}
+diff --git a/crates/critterctl/src/main.rs b/crates/critterctl/src/main.rs
+index 1bbb82b..c3af470 100644
+--- a/crates/critterctl/src/main.rs
++++ b/crates/critterctl/src/main.rs
+@@ -62,6 +62,17 @@ enum Cmd {
+     Hide,
+     /// Jump on the spot.
+     Hop,
++    /// Put the critter at a point (logical px, y down), in front of every window, and throw it with a velocity (px/s).
++    Place {
++        x: f32,
++        y: f32,
++        #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
++        vx: f32,
++        #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
++        vy: f32,
++    },
++    /// Hide the critter and pause it until the next `place`.
++    Park,
+     /// Send an Intent as raw JSON.
+     Raw {
+         json: String,
+@@ -73,6 +84,8 @@ fn main() -> anyhow::Result<()> {
+     let path = args.socket.unwrap_or_else(default_socket_path);
+     let req = match args.cmd {
+         Cmd::Status => ControlRequest::Status,
++        Cmd::Place { x, y, vx, vy } => ControlRequest::Place { feet: Point::new(x, y), velocity: Point::new(vx, vy) },
++        Cmd::Park => ControlRequest::Park,
+         other => ControlRequest::Intent(IntentEnvelope {
+             source: Source::Manual,
+             intent: to_intent(other, &path)?,
+@@ -141,6 +154,6 @@ fn to_intent(cmd: Cmd, socket: &Path) -> anyhow::Result<Intent> {
+         Cmd::Hide => Intent::Hide { from: None },
+         Cmd::Hop => Intent::Hop,
+         Cmd::Raw { json } => serde_json::from_str(&json).context("parsing intent JSON")?,
+-        Cmd::Status => unreachable!(),
++        Cmd::Status | Cmd::Place { .. } | Cmd::Park => unreachable!(),
+     })
+ }
+diff --git a/crates/critterd/src/main.rs b/crates/critterd/src/main.rs
+index ec1cb80..90265de 100644
+--- a/crates/critterd/src/main.rs
++++ b/crates/critterd/src/main.rs
+@@ -14,13 +14,14 @@ mod crowd;
+ mod fire;
+ mod mover;
+ mod sim;
++mod stream;
+ mod wander;
+ 
+ use anyhow::Context;
+ use clap::{Parser, ValueEnum};
+ use critter_adapters::{WindowSource, fake::Fake, hyprland::Hyprland};
+ use critter_brain::JevClient;
+-use critter_core::control::default_socket_path;
++use critter_core::control::{default_frames_socket_path, default_socket_path};
+ use critter_core::frame::FrameSlot;
+ use critter_core::species::Species;
+ use crowd::Crowd;
+@@ -80,6 +81,13 @@ struct Args {
+     /// Don't draw anything; only log.
+     #[arg(long)]
+     headless: bool,
++    /// Serve the frames as JSON lines on a Unix socket, for a renderer outside this program (the Caelestia
++    /// shell draws its critters that way). Without a path: $XDG_RUNTIME_DIR/desktop-critters-frames.sock.
++    #[arg(long, num_args = 0..=1)]
++    stream: Option<Option<PathBuf>>,
++    /// Frames per second on the stream.
++    #[arg(long, default_value_t = 30.0)]
++    stream_hz: f32,
+     /// Seed for the wanderer (default: random).
+     #[arg(long)]
+     seed: Option<u64>,
+@@ -161,8 +169,14 @@ fn main() -> anyhow::Result<()> {
+     let mut sim = Crowd::new(sims);
+     sim.set_variants(&variants);
+ 
++    let slot = Arc::new(FrameSlot::default());
++    let stream_path = args.stream.clone().map(|path| path.unwrap_or_else(default_frames_socket_path));
++    if let Some(path) = &stream_path {
++        stream::spawn(path, slot.clone(), args.stream_hz)?;
++        tracing::info!(socket = %path.display(), "frame stream ready");
++    }
++
+     let result = if !args.headless && critter_render::SUPPORTED {
+-        let slot = Arc::new(FrameSlot::default());
+         let sim_slot = slot.clone();
+         let (duration, log_hz) = (args.duration, args.log_hz);
+         let sim_thread = std::thread::Builder::new()
+@@ -179,9 +193,14 @@ fn main() -> anyhow::Result<()> {
+             .map_err(|_| anyhow::anyhow!("simulation thread panicked"))?;
+         render.and(sim)
+     } else {
+-        run(sim, source, control_rx, None, args.duration, args.log_hz)
++        let result = run(sim, source, control_rx, stream_path.is_some().then_some(slot.as_ref()), args.duration, args.log_hz);
++        slot.request_quit(); // stops the stream
++        result
+     };
+     let _ = std::fs::remove_file(&socket);
++    if let Some(path) = &stream_path {
++        let _ = std::fs::remove_file(path);
++    }
+     result
+ }
+ 
+diff --git a/crates/critterd/src/sim.rs b/crates/critterd/src/sim.rs
+index 86cc060..85bb1df 100644
+--- a/crates/critterd/src/sim.rs
++++ b/crates/critterd/src/sim.rs
+@@ -220,6 +220,10 @@ pub struct Sim {
+     fire: Fire,
+     /// Which colour scheme of the species it wears (0 = the species' own).
+     variant: u8,
++    /// Hidden and paused, until the next `place` (see [`Sim::park`]).
++    parked: bool,
++    /// When it was thrown by `place`: a ballistic arc the motor must not steer until it lands.
++    thrown: Option<f32>,
+     /// Soot marks its flame has left on windows and the floor.
+     marks: Marks,
+     /// When the next mark of this burst may be made (where the flame hits a window, and at its tip).
+@@ -300,6 +304,8 @@ impl Sim {
+             windup: None,
+             hop: Hop::default(),
+             variant: 0,
++            parked: false,
++            thrown: None,
+             marks: Marks::default(),
+             mark_next: 0.0,
+             tip_next: 0.0,
+@@ -346,6 +352,39 @@ impl Sim {
+         self.variant = variant;
+     }
+ 
++    /// Put the critter with its feet at `feet`, in front of every window, flying off with `velocity`
++    /// (px/s, y down) and falling from there. It forgets what it was doing and shows again. For a jump
++    /// out of something the world does not know about, such as a drawer of the shell.
++    pub fn place(&mut self, feet: Point, velocity: Point) {
++        self.parked = false;
++        self.forget_what_it_was_doing();
++        self.physics.spawn_critter(self.species.clone(), feet, self.world.front_lane());
++        self.physics.launch_critter(velocity);
++        self.thrown = Some(self.t);
++        self.frame_feet = feet;
++        self.frame_at = None;
++    }
++
++    /// Hide the critter and pause it where it is: no decisions, no drawing, until the next `place`.
++    pub fn park(&mut self) {
++        self.parked = true;
++        self.forget_what_it_was_doing();
++    }
++
++    fn forget_what_it_was_doing(&mut self) {
++        self.mover = None;
++        self.flight = None;
++        self.air = None;
++        self.windup = None;
++        self.hop = Hop::default();
++        self.fire.began = None;
++        if self.thrown.take().is_some() {
++            self.physics.end_flight();
++        }
++        self.arbiter.complete();
++        self.intent_changed();
++    }
++
+     pub fn species_name(&self) -> &str {
+         &self.species.name
+     }
+@@ -403,6 +442,14 @@ impl Sim {
+                 }
+                 ControlResponse::Accepted { accepted }
+             }
++            ControlRequest::Place { feet, velocity } => {
++                self.place(feet, velocity);
++                ControlResponse::Accepted { accepted: true }
++            }
++            ControlRequest::Park => {
++                self.park();
++                ControlResponse::Accepted { accepted: true }
++            }
+             ControlRequest::Status => ControlResponse::Status(StatusReport {
+                 species: self.species.name.clone(),
+                 feet: self.feet(),
+@@ -413,6 +460,7 @@ impl Sim {
+                 plan: self.last_status.clone(),
+                 windows: self.world.slabs.len(),
+                 outputs: self.world.outputs.len(),
++                parked: self.parked,
+             }),
+         }
+     }
+@@ -420,6 +468,9 @@ impl Sim {
+     /// Advance one fixed physics step (1 / `PHYSICS_HZ` s).
+     pub fn step(&mut self) {
+         self.t += 1.0 / PHYSICS_HZ;
++        if self.parked {
++            return;
++        }
+         let now = self.now();
+         let feet = self.feet();
+ 
+@@ -438,6 +489,16 @@ impl Sim {
+             self.physics
+                 .spawn_critter(self.species.clone(), spawn, self.world.front_lane());
+         }
++        if let Some(at) = self.thrown {
++            // A throw flies its arc; it is over once it stands on something again (not in the first
++            // moments, when the floor it left may still be under it).
++            self.physics.step(Default::default());
++            if self.t - at > 0.1 && self.physics.critter_grounded() {
++                self.thrown = None;
++                self.physics.end_flight();
++            }
++            return;
++        }
+         if self.flight.is_some() {
+             self.step_flight();
+             return;
+@@ -586,6 +647,9 @@ impl Sim {
+             },
+         );
+         self.facing = pose.facing;
++        if self.parked {
++            return Frame { outputs: self.world.outputs.clone(), critters: Vec::new(), decals: self.marks.decals(&self.world, self.t) };
++        }
+         if let Some(t0) = self.fire.began
+             && pose.kind == critter_core::frame::PoseKind::Idle
+         {
+@@ -1360,6 +1424,69 @@ mod tests {
+         Species::load(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/species/bean.toml")).unwrap()
+     }
+ 
++    fn cat() -> Species {
++        Species::load(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/species/cat.toml")).unwrap()
++    }
++
++    fn lone(species: Species) -> Sim {
++        Sim::new(species, &Fake::snapshot_at(0.0), Point::new(2000.0, 1000.0), BrainKind::Off, None, 2.0, 1).unwrap()
++    }
++
++    /// Thrown out of the top of the screen, the critter falls, lands and stands on something.
++    #[test]
++    fn placed_in_the_air_it_falls_and_lands() {
++        let mut sim = lone(cat());
++        let top = sim.world.outputs[0].rect.top();
++        let x = sim.world.outputs[0].rect.center().x;
++        sim.place(Point::new(x, top + 20.0), Point::new(150.0, -250.0));
++        assert!(sim.feet().y < top + 25.0, "starts where it was put: {:?}", sim.feet());
++
++        let mut went_up = false;
++        for _ in 0..(6.0 * PHYSICS_HZ) as usize {
++            let before = sim.feet().y;
++            sim.step();
++            went_up |= sim.feet().y < before - 0.01;
++        }
++        assert!(went_up, "the throw carries it up first");
++        let floor = sim.world.outputs[0].floor_y;
++        assert!(sim.physics.critter_grounded(), "it ended up standing: {:?}", sim.feet());
++        assert!(sim.feet().y <= floor + 2.0, "on or above the floor, not under it: {:?}", sim.feet());
++        assert!(sim.feet().x > x + 50.0, "it flew off to the right: {:?}", sim.feet());
++    }
++
++    /// A parked critter is not drawn and does not move; placing it brings it back.
++    #[test]
++    fn parked_it_hides_and_stands_still() {
++        let mut sim = lone(cat());
++        assert_eq!(sim.frame(0.016).critters.len(), 1);
++        sim.park();
++        let feet = sim.feet();
++        for _ in 0..(2.0 * PHYSICS_HZ) as usize {
++            sim.step();
++        }
++        assert_eq!(sim.feet(), feet, "no physics while parked");
++        let frame = sim.frame(0.016);
++        assert!(frame.critters.is_empty(), "nothing to draw");
++        assert!(!frame.outputs.is_empty(), "the desktop is still described");
++        let ControlResponse::Status(status) = sim.handle(ControlRequest::Status) else { panic!("status") };
++        assert!(status.parked);
++
++        sim.handle(ControlRequest::Place { feet: Point::new(300.0, 100.0), velocity: Point::default() });
++        assert_eq!(sim.frame(0.016).critters.len(), 1, "back in the picture");
++        let ControlResponse::Status(status) = sim.handle(ControlRequest::Status) else { panic!("status") };
++        assert!(!status.parked);
++    }
++
++    /// Placing drops the intent it had: the next one starts from where it was put.
++    #[test]
++    fn placing_forgets_the_old_intent() {
++        let mut sim = lone(cat());
++        sim.handle(ControlRequest::Intent(IntentEnvelope { source: Source::Manual, intent: Intent::Rest { seconds: 30.0 } }));
++        assert!(sim.current_intent().is_some());
++        sim.place(Point::new(500.0, 100.0), Point::default());
++        assert!(sim.current_intent().is_none());
++    }
++
+     /// 90 simulated seconds of wandering on the scripted two-monitor desktop (one window
+     /// drifts): the critter stays inside the desktop, keeps finishing legs, and is never
+     /// hidden behind a window.
+diff --git a/crates/critterd/src/stream.rs b/crates/critterd/src/stream.rs
+new file mode 100644
+index 0000000..9460c4e
+--- /dev/null
++++ b/crates/critterd/src/stream.rs
+@@ -0,0 +1,128 @@
++//! `--stream`: the frames for renderers outside this process, such as the Caelestia shell.
++//!
++//! Everybody who connects to the socket gets the latest frame of the [`FrameSlot`] as one JSON line
++//! (see [`critter_core::stream`]) about `hz` times a second. Nobody connected, nothing is
++//! serialised. A client that stops reading, or goes away, is dropped.
++
++use critter_core::frame::FrameSlot;
++use critter_core::stream::line;
++use std::io::Write;
++use std::os::unix::net::{UnixListener, UnixStream};
++use std::path::Path;
++use std::sync::{Arc, Mutex};
++use std::thread;
++use std::time::{Duration, Instant};
++
++type Clients = Arc<Mutex<Vec<UnixStream>>>;
++
++/// How long a client may take to accept a line before it is let go.
++const WRITE_TIMEOUT: Duration = Duration::from_millis(100);
++
++/// Start serving `slot` on `path` at about `hz` frames per second.
++pub fn spawn(path: &Path, slot: Arc<FrameSlot>, hz: f32) -> anyhow::Result<()> {
++    if path.exists() {
++        // Like the control socket: only a socket nobody answers on is a leftover from a crashed run.
++        if UnixStream::connect(path).is_ok() {
++            anyhow::bail!("another critterd is already streaming on {} (use --stream PATH for a second one)", path.display());
++        }
++        std::fs::remove_file(path)?;
++    }
++    let listener = UnixListener::bind(path)?;
++    let clients: Clients = Arc::default();
++    let t0 = Instant::now();
++
++    let (accept_clients, accept_slot) = (clients.clone(), slot.clone());
++    thread::Builder::new().name("stream-accept".into()).spawn(move || {
++        for mut client in listener.incoming().flatten() {
++            let _ = client.set_write_timeout(Some(WRITE_TIMEOUT));
++            // The newcomer need not wait for the next tick to see something.
++            if client.write_all(line(t0.elapsed().as_secs_f64(), &accept_slot.latest()).as_bytes()).is_ok() {
++                accept_clients.lock().unwrap_or_else(|e| e.into_inner()).push(client);
++            }
++        }
++    })?;
++
++    let every = Duration::from_secs_f32(1.0 / hz.max(1.0));
++    thread::Builder::new().name("stream-send".into()).spawn(move || {
++        while !slot.quit_requested() {
++            thread::sleep(every);
++            let mut clients = clients.lock().unwrap_or_else(|e| e.into_inner());
++            if clients.is_empty() {
++                continue;
++            }
++            let text = line(t0.elapsed().as_secs_f64(), &slot.latest());
++            clients.retain_mut(|c| c.write_all(text.as_bytes()).is_ok());
++        }
++    })?;
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use critter_core::frame::{CritterSprite, Frame, Pose};
++    use critter_core::stream::StreamFrame;
++    use std::io::{BufRead, BufReader};
++
++    fn sprite(x: f32) -> CritterSprite {
++        CritterSprite {
++            species: "cat".into(),
++            body: critter_core::geometry::Rect { x, y: 10.0, w: 44.0, h: 30.0 },
++            layer: critter_core::world::Layer(0),
++            occluders: Vec::new(),
++            pose: Pose::default(),
++            variant: 0,
++            soot: 0.0,
++        }
++    }
++
++    fn socket(name: &str) -> std::path::PathBuf {
++        std::env::temp_dir().join(format!("critterd-stream-test-{}-{name}.sock", std::process::id()))
++    }
++
++    /// A client gets the latest frame at once and then fresh ones, each on its own line.
++    #[test]
++    fn a_client_receives_frames_as_lines() {
++        let (path, slot) = (socket("lines"), Arc::new(FrameSlot::default()));
++        slot.publish(Frame { critters: vec![sprite(1.0)], ..Frame::default() });
++        spawn(&path, slot.clone(), 100.0).unwrap();
++
++        let client = UnixStream::connect(&path).unwrap();
++        client.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
++        let mut lines = BufReader::new(client).lines();
++        let first: StreamFrame = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
++        assert_eq!(first.frame.critters[0].body.x, 1.0);
++
++        slot.publish(Frame { critters: vec![sprite(2.0)], ..Frame::default() });
++        let mut seen = None;
++        for _ in 0..50 {
++            let next: StreamFrame = serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
++            if next.frame.critters[0].body.x == 2.0 {
++                assert!(next.t >= first.t, "the clock only goes forward");
++                seen = Some(next);
++                break;
++            }
++        }
++        assert!(seen.is_some(), "the new frame arrives within a few ticks");
++        slot.request_quit();
++        let _ = std::fs::remove_file(path);
++    }
++
++    /// A second daemon refuses to take the socket of a running one, and a stale file is replaced.
++    #[test]
++    fn only_a_stale_socket_is_taken_over() {
++        let (path, slot) = (socket("claim"), Arc::new(FrameSlot::default()));
++        spawn(&path, slot.clone(), 30.0).unwrap();
++        let err = spawn(&path, slot.clone(), 30.0).unwrap_err().to_string();
++        assert!(err.contains("already streaming"), "{err}");
++        slot.request_quit();
++
++        // A socket file with nobody behind it is a leftover.
++        let stale = socket("stale");
++        drop(UnixListener::bind(&stale).unwrap());
++        assert!(stale.exists());
++        spawn(&stale, Arc::new(FrameSlot::default()), 30.0).unwrap();
++        let _ = std::fs::remove_file(path);
++        let _ = std::fs::remove_file(stale);
++    }
++}
+-- 
+2.43.0
+

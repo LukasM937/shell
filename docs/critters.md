@@ -8,9 +8,14 @@ Nothing is ever clicked or moved: the cat is drawn in a click-through window ove
 
 ## Set up
 
+`critterd` needs two additions (the frame stream, `place` and `park`), which are in
+[`extras/critters/desktop-critters-frame-stream.patch`](../extras/critters/desktop-critters-frame-stream.patch), a commit for the `main`
+of desktop-critters (as of `b4ad94a`). Apply it there, and it is best merged into that repository:
+
 ```sh
 git clone git@github.com:LukasM937/desktop-critters ~/desktop-critters
-cd ~/desktop-critters && git checkout claude/shell-frame-stream   # until it is merged
+cd ~/desktop-critters
+git am ~/path/to/shell/extras/critters/desktop-critters-frame-stream.patch
 cargo build --release -p critterd
 ```
 
