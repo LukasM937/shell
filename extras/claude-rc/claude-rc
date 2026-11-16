@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Starts Claude Code Remote Control (`claude remote-control`, short `claude rc`), so the sessions on this machine can
+# be used from claude.ai/code and the Claude app. It is what the systemd user service runs, see install.sh.
+#
+# Settings come from the environment or from ~/.config/claude-rc/env (the service reads that file):
+#   CLAUDE_RC_NAME     the name shown in the app, default: the hostname
+#   CLAUDE_RC_DIR      the folder the sessions work in, default: your home. Run `claude` there once to trust it
+#   CLAUDE_RC_ARGS     more options for `claude remote-control`, for example "--permission-mode acceptEdits"
+#   CLAUDE_RC_INHIBIT  1 (default) keeps the machine from suspending while this runs, 0 lets it sleep
+set -euo pipefail
+
+# Exit code for a problem that waiting will not fix, which the service does not retry
+readonly EX_CONFIG=78
+
+claude=$(command -v claude || true)
+if [[ -z $claude ]]; then
+    for candidate in "$HOME/.local/bin/claude" "$HOME/.npm-global/bin/claude" /usr/local/bin/claude /usr/bin/claude; do
+        if [[ -x $candidate ]]; then
+            claude=$candidate
+            break
+        fi
+    done
+fi
+if [[ -z $claude ]]; then
+    echo "claude-rc: the claude command is not installed (or not in PATH=$PATH)" >&2
+    exit "$EX_CONFIG"
+fi
+
+if ! "$claude" auth status 2>/dev/null | grep -q '"loggedIn": *true'; then
+    echo "claude-rc: not logged in, run \`claude auth login\` as $(id -un) once" >&2
+    exit "$EX_CONFIG"
+fi
+
+dir=${CLAUDE_RC_DIR:-$HOME}
+if [[ ! -d $dir ]]; then
+    echo "claude-rc: CLAUDE_RC_DIR=$dir is not a folder" >&2
+    exit "$EX_CONFIG"
+fi
+cd "$dir"
+
+read -ra extra <<< "${CLAUDE_RC_ARGS:-}"
+command=("$claude" remote-control --name "${CLAUDE_RC_NAME:-$(hostname -s)}" "${extra[@]}")
+
+# A suspended machine drops the session, so hold off sleep for as long as the server runs
+if [[ ${CLAUDE_RC_INHIBIT:-1} != 0 ]]; then
+    if command -v systemd-inhibit > /dev/null; then
+        command=(systemd-inhibit --what=sleep --mode=block --who="Claude Remote Control" --why="Sessions are open for remote use" "${command[@]}")
+    else
+        echo "claude-rc: systemd-inhibit not found, the machine may suspend" >&2
+    fi
+fi
+
+exec "${command[@]}"

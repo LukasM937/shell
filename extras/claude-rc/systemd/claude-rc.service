@@ -1,0 +1,17 @@
+[Unit]
+Description=Claude Code Remote Control
+# Restart forever: after boot the network can take a while
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin
+EnvironmentFile=-%h/.config/claude-rc/env
+ExecStart=@SCRIPT@
+Restart=on-failure
+RestartSec=30
+# 78: not installed, not logged in or a bad folder, which retrying will not fix
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=default.target
