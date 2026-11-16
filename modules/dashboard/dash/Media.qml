@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import Caelestia.Components
 import Caelestia.Config
 import Caelestia.I18n
@@ -177,5 +178,11 @@ Item {
         source: Paths.absolutePath(Config.paths.mediaGif)
         asynchronous: true
         fillMode: AnimatedImage.PreserveAspectFit
+
+        // The cat may be out roaming the desktop (services/Critters.qml), and jumps out of and back into this spot
+        visible: !Critters.enabled || Critters.home
+
+        Component.onCompleted: Critters.attachHome(bongocat, QsWindow.window)
+        Component.onDestruction: Critters.detachHome(bongocat)
     }
 }

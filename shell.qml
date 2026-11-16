@@ -10,6 +10,7 @@ import Caelestia.Config
 import qs.services
 import qs.modules.areapicker
 import qs.modules.background
+import qs.modules.critters
 import qs.modules.drawers
 import qs.modules.lock
 import qs.daemons
@@ -25,6 +26,7 @@ ShellRoot {
         Players;
         Brightness;
         Weather.reload();
+        Critters;
 
         if (GlobalConfig.utilities.vpn.enabled)
             VPN;
@@ -44,6 +46,7 @@ ShellRoot {
     Background {}
     Drawers {}
     AreaPicker {}
+    CritterOverlay {}
     Lock {
         id: lock
     }

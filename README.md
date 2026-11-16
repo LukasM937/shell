@@ -162,6 +162,11 @@ You can view the list of available IPC commands by running `caelestia shell -s`.
 The launcher can list your Hyprland keybinds. It has no default key; see [the keybind overview](docs/keybind-overview.md)
 for how to bind and use it.
 
+### Desktop cat
+
+The cat of the dashboard can jump out of it and roam the desktop, driven by [desktop-critters](https://github.com/LukasM937/desktop-critters)
+and a decision model. Off by default; see [the desktop cat](docs/critters.md).
+
 ### Login screen
 
 `extras/sddm-theme` is an SDDM theme in the look of the lock screen, with your scheme, wallpaper and profile picture.

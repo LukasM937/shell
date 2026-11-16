@@ -1,0 +1,27 @@
+# The cat of the dashboard (assets/bongocat.gif) as a desktop critter, for desktop-critters (critterd --species).
+# The body is as big as the picture is drawn: the shell scales the gif to the body. It never climbs, it jumps.
+name = "bongocat"
+class = "walker"
+
+[body]
+height_px = 48
+width_px = 76
+mass = 1.0
+walk_speed = 70      # a slow prowl
+run_speed = 300      # a dash now and then
+jump_height = 150    # up onto a window top
+
+[personality]
+temperature = 1.0
+curiosity = 0.8
+energy = 0.5
+
+[abilities]
+walk = true
+climb = false
+cling = false
+hop_px = 300         # across the gap between two window tops
+wall_leap = false
+fly = false
+swim = false
+web_px = 0
