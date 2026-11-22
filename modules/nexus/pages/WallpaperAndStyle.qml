@@ -141,5 +141,9 @@ PageBase {
         DesktopClockSettings {}
 
         DepthClockSettings {}
+
+        UiScaleSettings {
+            screen: root.nState.screen
+        }
     }
 }

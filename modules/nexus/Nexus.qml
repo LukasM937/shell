@@ -61,30 +61,51 @@ Item {
         opacity: root.blobColour.a
         radius: Tokens.rounding.medium
 
-        implicitWidth: windowBtn.implicitWidth + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small) * 2
-        implicitHeight: windowBtn.implicitHeight + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small)
+        implicitWidth: windowBtns.implicitWidth + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small) * 2
+        implicitHeight: windowBtns.implicitHeight + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small)
     }
 
-    IconButton {
-        id: windowBtn
+    Row {
+        id: windowBtns
 
         anchors.centerIn: windowBtnRect
-        icon: nState.isWindow ? "close" : "pip"
-        type: IconButton.Text
-        label.fill: 0
-        inactiveOnColour: hovered ? nState.isWindow ? Colours.palette.m3error : Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
-        stateLayer.opacity: 0
-        onClicked: {
-            if (!nState.isWindow)
+        spacing: Tokens.spacing.extraSmall
+
+        // Only in the popout: turns it into a regular window. Closing must not do that, so it has its own button
+        IconButton {
+            visible: !root.nState.isWindow
+            icon: "pip"
+            type: IconButton.Text
+            label.fill: 0
+            inactiveOnColour: hovered ? Colours.palette.m3primary : Colours.palette.m3onSurfaceVariant
+            stateLayer.opacity: 0
+            onClicked: {
                 WindowFactory.create();
-            root.close();
+                root.close();
+            }
+
+            label.scale: pressed ? 0.8 : 1
+            label.renderType: Text.QtRendering
+
+            Behavior on label.scale {
+                Anim {}
+            }
         }
 
-        label.scale: pressed ? 0.8 : 1
-        label.renderType: Text.QtRendering
+        IconButton {
+            icon: "close"
+            type: IconButton.Text
+            label.fill: 0
+            inactiveOnColour: hovered ? Colours.palette.m3error : Colours.palette.m3onSurfaceVariant
+            stateLayer.opacity: 0
+            onClicked: root.close()
 
-        Behavior on label.scale {
-            Anim {}
+            label.scale: pressed ? 0.8 : 1
+            label.renderType: Text.QtRendering
+
+            Behavior on label.scale {
+                Anim {}
+            }
         }
     }
 
