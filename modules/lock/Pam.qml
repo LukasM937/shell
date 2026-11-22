@@ -22,7 +22,18 @@ Scope {
 
     readonly property alias passwd: passwd
     readonly property alias fprint: fprint
-    readonly property alias howdy: howdy
+    readonly property alias face: face
+
+    // Name of both the PAM config in assets/pam.d and the provider's executable
+    readonly property string faceAuthProvider: {
+        switch (GlobalConfig.lock.faceAuthProvider) {
+        case FaceAuthProvider.Visage:
+            return "visage";
+        case FaceAuthProvider.Howdy:
+        default:
+            return "howdy";
+        }
+    }
 
     property string lockMessage
     property real lockedUntil // When a faillock lockout is over at the latest, 0 if there is none or its end is unknown
@@ -37,26 +48,24 @@ Scope {
         if (passwd.active)
             return;
 
-        // Trigger howdy on enter while empty buffer
-        if (howdy.canAttempt && !howdy.active && (event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && buffer.length === 0)
-            return howdy.start(); // Gate on active so double enter still allows empty password
+        // Trigger face auth on enter while empty buffer
+        if (face.canAttempt && !face.active && (event.key === Qt.Key_Enter || event.key === Qt.Key_Return) && buffer.length === 0)
+            return face.start(); // Gate on active so double enter still allows empty password
 
         if (state === Pam.MaxTries)
             return;
 
-        // Abort howdy on pwd input
-        if (howdy.active)
-            howdy.abort();
+        // Abort face auth on pwd input
+        if (face.active)
+            face.abort();
 
         if (event.key === Qt.Key_Enter || event.key === Qt.Key_Return) {
             lockReported = false;
             passwd.start();
+        } else if ((event.key === Qt.Key_Backspace || event.key === Qt.Key_U) && (event.modifiers & Qt.ControlModifier)) {
+            buffer = "";
         } else if (event.key === Qt.Key_Backspace) {
-            if (event.modifiers & Qt.ControlModifier) {
-                buffer = "";
-            } else {
-                buffer = buffer.slice(0, -1);
-            }
+            buffer = buffer.slice(0, -1);
         } else if (/^[^\x00-\x1F\x7F-\x9F]+$/.test(event.text)) {
             // Allow anything except control characters
             buffer += event.text;
@@ -72,7 +81,7 @@ Scope {
     }
 
     function clearTransientState(): void {
-        for (const obj of [root, fprint, howdy])
+        for (const obj of [root, fprint, face])
             if (obj.state !== Pam.MaxTries)
                 obj.state = Pam.None;
     }
@@ -169,18 +178,18 @@ Scope {
     }
 
     ManualPamContext {
-        id: howdy
+        id: face
 
-        config: "howdy"
-        availCommand: ["sh", "-c", "command -v howdy"]
-        enabled: GlobalConfig.lock.enableHowdy
-        maxTries: GlobalConfig.lock.maxHowdyTries
+        config: root.faceAuthProvider
+        availCommand: ["sh", "-c", `command -v ${root.faceAuthProvider}`]
+        enabled: GlobalConfig.lock.enableFaceAuth
+        maxTries: GlobalConfig.lock.maxFaceAuthTries
     }
 
     Connections {
         function onResumed(): void {
-            if (howdy.canAttempt && !howdy.active && GlobalConfig.lock.triggerHowdyOnWake)
-                howdy.start();
+            if (face.canAttempt && !face.active && GlobalConfig.lock.triggerFaceAuthOnWake)
+                face.start();
         }
 
         target: SessionManager
@@ -190,9 +199,9 @@ Scope {
         function onSecureChanged(): void {
             if (root.lock.secure) {
                 fprint.checkAvailable();
-                howdy.checkAvailable();
+                face.checkAvailable();
                 fprint.reset();
-                howdy.reset();
+                face.reset();
                 root.buffer = "";
                 root.state = Pam.None;
                 root.lockMessage = "";
@@ -202,7 +211,7 @@ Scope {
 
         function onUnlock(): void {
             fprint.abort();
-            howdy.abort();
+            face.abort();
             passwd.abort();
         }
 
@@ -214,9 +223,18 @@ Scope {
             root.restartFprint();
         }
 
-        function onEnableHowdyChanged(): void {
-            if (!GlobalConfig.lock.enableHowdy && howdy.active)
-                howdy.abort();
+        function onEnableFaceAuthChanged(): void {
+            if (!GlobalConfig.lock.enableFaceAuth && face.active)
+                face.abort();
+            else if (root.lock.secure)
+                face.checkAvailable();
+        }
+
+        function onFaceAuthProviderChanged(): void {
+            if (face.active)
+                face.abort();
+            if (root.lock.secure)
+                face.checkAvailable();
         }
 
         target: GlobalConfig.lock
