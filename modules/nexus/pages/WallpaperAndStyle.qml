@@ -138,6 +138,10 @@ PageBase {
             onToggled: Colours.setMode(checked ? "dark" : "light")
         }
 
+        UiScaleSettings {
+            screen: root.nState.screen
+        }
+
         DesktopClockSettings {}
 
         DepthClockSettings {}
